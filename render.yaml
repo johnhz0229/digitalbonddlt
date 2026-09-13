@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: tokenized-bond-demo
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.14.0
+      - key: HOST
+        value: 0.0.0.0
+      - key: SESSION_MINUTES
+        value: 30
+      - key: MAX_SESSIONS
+        value: 12

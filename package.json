@@ -1,0 +1,26 @@
+{
+  "name": "tokenized-bond-prototype",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Educational tokenized bond prototype for a regulated capital-markets use case",
+  "scripts": {
+    "build": "hardhat compile",
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "demo": "npm run build && node scripts/demo-server.js",
+    "start": "node scripts/demo-server.js",
+    "deploy:local": "hardhat run scripts/deploy.js --network localhost"
+  },
+  "engines": {
+    "node": ">=20 <23"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "hardhat": "^2.22.18",
+    "solc": "^0.8.24"
+  },
+  "dependencies": {
+    "ethers": "^6.15.0",
+    "ganache": "^7.9.2"
+  }
+}

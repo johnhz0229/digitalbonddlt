@@ -1,0 +1,10 @@
+node_modules
+.npm-cache
+.chrome-profile*
+.runtime-tmp
+.git
+cache
+artifacts
+coverage
+dashboard-preview.png
+*.zip

@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Digital Bond — Treasury Lab</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="wordmark" href="#" aria-label="Treasury Lab home">
+        <span class="wordmark-symbol">T</span><span>Treasury<span>/Lab</span></span>
+      </a>
+      <div class="topbar-right">
+        <div class="network"><i></i>Private session ledger</div>
+        <span class="prototype-label">EDUCATIONAL PROTOTYPE</span>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="instrument-header">
+        <div class="instrument-intro">
+          <p class="overline">DIGITAL ASSETS · FUNDING MANAGEMENT</p>
+          <div class="title-line">
+            <h1 id="bond-name">Demo Digital Bond 2027</h1>
+            <span class="symbol-pill" id="bond-symbol">DDB27</span>
+            <span class="status-pill" id="phase">LOADING</span>
+          </div>
+          <p class="subtitle">A permissioned fixed-rate note running on an isolated Solidity demo ledger.</p>
+          <div class="contract-line"><span>SMART CONTRACT</span><code id="contract-address">Waiting for local server…</code></div>
+        </div>
+        <div class="hero-value"><span>OUTSTANDING</span><strong><b id="supply">0</b><small> units</small></strong></div>
+      </section>
+
+      <section class="term-strip" aria-label="Bond terms">
+        <div><span>Face value</span><strong id="face-value">—</strong></div>
+        <div><span>Fixed coupon</span><strong id="coupon-rate">—</strong></div>
+        <div><span>Next coupon</span><strong id="next-coupon">—</strong></div>
+        <div><span>Maturity</span><strong id="maturity">—</strong></div>
+        <div><span>Coupons processed</span><strong id="coupons-paid">0</strong></div>
+        <div><span>Ledger date</span><strong id="block-time">—</strong></div>
+      </section>
+
+      <nav class="view-tabs" aria-label="Project views">
+        <button class="tab active" data-tab="overview" aria-selected="true">Overview</button>
+        <button class="tab" data-tab="demo" aria-selected="false">Live workflow</button>
+        <button class="tab" data-tab="requirements" aria-selected="false">Requirements</button>
+        <button class="tab" data-tab="assurance" aria-selected="false">Testing & risks</button>
+      </nav>
+
+      <section class="view active" data-view="overview">
+        <div class="overview-grid">
+          <article class="story-card dark-card">
+            <p class="overline light">THE BUSINESS QUESTION</p>
+            <h2>Can selected bond lifecycle rules be executed on a shared ledger?</h2>
+            <p>The prototype explores how investor eligibility, ownership, coupon allocation and principal redemption can move from fragmented process steps into transparent, executable rules.</p>
+            <button class="button button-light" data-open-tab="demo">Run the live workflow <span>→</span></button>
+          </article>
+
+          <article class="story-card">
+            <p class="overline">WHAT THIS PROTOTYPE SHOWS</p>
+            <h2>One instrument. One state. Five controlled events.</h2>
+            <div class="value-list">
+              <div><span>01</span><p><strong>Eligibility by design</strong>Only approved addresses may receive the security.</p></div>
+              <div><span>02</span><p><strong>Shared ownership record</strong>Issuance and transfers update the same ledger state.</p></div>
+              <div><span>03</span><p><strong>Automated servicing</strong>Coupon and redemption logic follow encoded terms.</p></div>
+              <div><span>04</span><p><strong>Traceable execution</strong>Each successful action produces an auditable event.</p></div>
+            </div>
+          </article>
+        </div>
+
+        <article class="wide-card">
+          <div class="card-intro"><p class="overline">PROCESS COMPARISON</p><h2>From reconciled records to shared state</h2><p>This is a simplified process hypothesis—not a claim that DLT removes legal, regulatory or operational infrastructure.</p></div>
+          <div class="comparison-table">
+            <div class="comparison-head"><span>Lifecycle stage</span><span>Conventional model</span><span>Prototype DLT model</span><span>Potential effect</span></div>
+            <div><strong>Investor eligibility</strong><span>KYC evidence checked across participant systems</span><span>Issuer-managed on-chain allowlist</span><em>Rules travel with the asset</em></div>
+            <div><strong>Ownership</strong><span>Multiple books and reconciliation points</span><span>One contract state records balances</span><em>Shared source of truth</em></div>
+            <div><strong>Coupon</strong><span>Entitlements calculated and distributed via agents</span><span>Contract calculates from current holdings</span><em>Transparent automation</em></div>
+            <div><strong>Redemption</strong><span>Cash payment and security cancellation coordinated</span><span>Funding, payment and token burn linked</span><em>Connected final state</em></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="view" data-view="demo">
+        <div class="demo-toolbar">
+          <div><p class="overline">LIVE CONTRACT</p><h2>Transaction workbench</h2><p>Recommended path: approve → issue → transfer → coupon → redeem.</p></div>
+          <button class="button button-outline" data-action="reset">Reset simulation</button>
+        </div>
+        <section class="instrument-builder">
+          <div class="builder-heading">
+            <span class="builder-step">00</span>
+            <div><p class="overline">INSTRUMENT BUILDER</p><h3>Define the bond terms</h3><p>Deploying new terms creates a fresh Solidity contract and clears the current simulation.</p></div>
+          </div>
+          <div class="builder-fields">
+            <label><span>Bond name</span><input id="config-name" type="text" value="Demo Digital Bond 2027" maxlength="64" /></label>
+            <label><span>Symbol</span><input id="config-symbol" type="text" value="DDB27" maxlength="8" /></label>
+            <label><span>Face value</span><input id="config-face-value" type="number" value="1" min="0.01" step="0.01" /></label>
+            <label><span>Annual coupon</span><div class="input-suffix"><input id="config-coupon" type="number" value="5" min="0" max="20" step="0.1" /><b>%</b></div></label>
+            <label><span>Payment frequency</span><select id="config-frequency"><option value="30">Monthly</option><option value="90" selected>Quarterly</option><option value="180">Semi-annual</option><option value="365">Annual</option></select></label>
+            <label><span>Maturity</span><select id="config-maturity"><option value="1" selected>1 year</option><option value="2">2 years</option><option value="3">3 years</option><option value="5">5 years</option></select></label>
+            <button class="button deploy-button" id="configure-button">Deploy new bond</button>
+          </div>
+        </section>
+        <section class="content-grid">
+          <div class="main-column">
+            <div class="lifecycle">
+              <article class="stage"><div class="stage-index">01</div><div class="stage-copy"><div class="stage-tag">COMPLIANCE</div><h3>Approve eligible investors</h3><p>Write the result of an assumed off-chain KYC check to the allowlist.</p></div><div class="stage-actions two-buttons"><button class="button button-outline" data-action="whitelist" data-investor="alice">Approve Alice</button><button class="button button-outline" data-action="whitelist" data-investor="bob">Approve Bob</button></div></article>
+              <article class="stage"><div class="stage-index">02</div><div class="stage-copy"><div class="stage-tag">PRIMARY MARKET</div><h3>Allocate bond units</h3><p>Issue new units directly to an approved investor.</p></div><div class="stage-actions inline-form"><select id="issue-investor" aria-label="Investor receiving issuance"><option value="alice">Alice</option><option value="bob">Bob</option></select><input id="issue-units" type="number" value="10" min="1" max="1000" aria-label="Units to issue" /><button class="button" id="issue-button">Issue</button></div></article>
+              <article class="stage"><div class="stage-index">03</div><div class="stage-copy"><div class="stage-tag">SECONDARY MARKET</div><h3>Settle a transfer</h3><p>Move ownership between two whitelisted addresses.</p></div><div class="stage-actions transfer-form"><select id="transfer-from" aria-label="Transfer from"><option value="alice">Alice</option><option value="bob">Bob</option></select><span class="direction">→</span><select id="transfer-to" aria-label="Transfer to"><option value="bob">Bob</option><option value="alice">Alice</option></select><input id="transfer-units" type="number" value="4" min="1" aria-label="Units to transfer" /><button class="button" id="transfer-button">Transfer</button></div></article>
+              <article class="stage"><div class="stage-index">04</div><div class="stage-copy"><div class="stage-tag">ASSET SERVICING</div><h3>Distribute the coupon</h3><p>Advance the clock, calculate entitlements and pay current holders.</p></div><div class="stage-actions two-buttons"><button class="button button-outline" data-action="advanceCoupon">Move to date</button><button class="button" data-action="payCoupon">Pay coupon</button></div></article>
+              <article class="stage"><div class="stage-index">05</div><div class="stage-copy"><div class="stage-tag">MATURITY</div><h3>Redeem principal</h3><p>Fund repayment, return principal and burn outstanding units.</p></div><div class="stage-actions maturity-actions"><button class="button button-outline" data-action="advanceMaturity">Move to maturity</button><button class="button" data-action="fundRedemption">Fund principal</button><button class="button button-soft" data-action="redeem" data-investor="alice">Redeem Alice</button><button class="button button-soft" data-action="redeem" data-investor="bob">Redeem Bob</button></div></article>
+            </div>
+          </div>
+
+          <aside class="side-column">
+            <section class="panel register-panel">
+              <div class="panel-title"><div><p class="overline">HOLDER REGISTER</p><h2>Investors</h2></div><span class="live-label"><i></i>Live</span></div>
+              <div class="holder" id="alice-card"><div class="holder-identity"><span class="avatar">A</span><div><strong>Alice</strong><small id="alice-status">Not approved</small></div></div><div class="position"><strong id="alice-units">0</strong><span>units held</span></div><div class="cashflows"><div><span>Coupons received</span><strong id="alice-coupon">0</strong></div><div><span>Principal received</span><strong id="alice-principal">0</strong></div></div></div>
+              <div class="holder" id="bob-card"><div class="holder-identity"><span class="avatar">B</span><div><strong>Bob</strong><small id="bob-status">Not approved</small></div></div><div class="position"><strong id="bob-units">0</strong><span>units held</span></div><div class="cashflows"><div><span>Coupons received</span><strong id="bob-coupon">0</strong></div><div><span>Principal received</span><strong id="bob-principal">0</strong></div></div></div>
+              <p class="panel-note">Cashflows use local test currency only.</p>
+            </section>
+            <section class="panel activity-panel"><div class="panel-title"><div><p class="overline">IMMUTABLE LOG</p><h2>Recent activity</h2></div></div><div id="activity" class="activity-list"><div class="empty-state">Start the local demo to view transactions.</div></div></section>
+          </aside>
+        </section>
+      </section>
+
+      <section class="view" data-view="requirements">
+        <article class="wide-card">
+          <div class="card-intro split-intro"><div><p class="overline">REQUIREMENTS ENGINEERING</p><h2>From business rule to tested implementation</h2></div><p>Each requirement is expressed as a user outcome, implemented as contract logic and covered by an acceptance test.</p></div>
+          <div class="requirements-table">
+            <div class="requirements-head"><span>Business rule</span><span>User outcome</span><span>Solidity function</span><span>Acceptance evidence</span></div>
+            <div><strong>Only eligible investors may hold</strong><span>Issuer approves verified addresses</span><code>setWhitelisted()</code><span class="pass">✓ Non-issuer rejected</span></div>
+            <div><strong>Issuance is issuer-controlled</strong><span>Approved investor receives defined units</span><code>issue()</code><span class="pass">✓ Balance and supply update</span></div>
+            <div><strong>Transfers remain permissioned</strong><span>Holder transfers only to approved party</span><code>transfer()</code><span class="pass">✓ Invalid recipient rejected</span></div>
+            <div><strong>Coupon follows instrument terms</strong><span>Current holders receive scheduled cashflow</span><code>payCoupon()</code><span class="pass">✓ Timing and amount checked</span></div>
+            <div><strong>Principal is returned once</strong><span>Holder redeems units after maturity</span><code>redeem()</code><span class="pass">✓ Units burned on payment</span></div>
+          </div>
+        </article>
+
+        <article class="wide-card architecture-card">
+          <div class="card-intro"><p class="overline">SOLUTION ARCHITECTURE</p><h2>A thin interface over executable rules</h2></div>
+          <div class="architecture">
+            <div><span>01</span><strong>Browser dashboard</strong><small>Business-friendly interaction</small></div><i>→</i>
+            <div><span>02</span><strong>Local API</strong><small>Maps actions to transactions</small></div><i>→</i>
+            <div><span>03</span><strong>Solidity contract</strong><small>Enforces lifecycle rules</small></div><i>→</i>
+            <div><span>04</span><strong>Hardhat ledger</strong><small>Stores state and events</small></div>
+          </div>
+          <div class="architecture-note"><strong>Deliberate boundary</strong><p>KYC identity, legal documentation and regulated cash settlement remain off-chain in this prototype.</p></div>
+        </article>
+      </section>
+
+      <section class="view" data-view="assurance">
+        <div class="assurance-grid">
+          <article class="wide-card tests-card">
+            <div class="card-intro"><p class="overline">AUTOMATED ACCEPTANCE TESTS</p><div class="score-line"><h2>5 scenarios verified</h2><strong>5/5</strong></div><p>The suite covers both successful lifecycle events and controls that must reject invalid actions.</p></div>
+            <div class="test-list">
+              <div><span>PASS</span><p><strong>Issuer authority</strong>Only the issuer can approve investors and allocate units.</p></div>
+              <div><span>PASS</span><p><strong>Transfer restriction</strong>Unapproved recipients cannot receive the security.</p></div>
+              <div><span>PASS</span><p><strong>Coupon distribution</strong>Payment follows current holdings at the scheduled date.</p></div>
+              <div><span>PASS</span><p><strong>Payment validation</strong>An incorrectly funded coupon is rejected.</p></div>
+              <div><span>PASS</span><p><strong>Maturity redemption</strong>Principal is funded, paid and units are burned.</p></div>
+            </div>
+          </article>
+
+          <article class="wide-card risks-card">
+            <div class="card-intro"><p class="overline">PRODUCTION GAP ANALYSIS</p><h2>What a regulated implementation still needs</h2><p>The prototype demonstrates process logic, not production readiness.</p></div>
+            <div class="risk-grid">
+              <div><span>IDENTITY</span><strong>KYC/AML integration</strong><p>Binding legal identities, onboarding evidence and sanctions controls.</p></div>
+              <div><span>SETTLEMENT</span><strong>Regulated cash leg</strong><p>Tokenized deposit, central-bank money or external payment-versus-delivery.</p></div>
+              <div><span>GOVERNANCE</span><strong>Institutional controls</strong><p>Role separation, multisignature approval, pause and recovery processes.</p></div>
+              <div><span>PRIVACY</span><strong>Confidentiality design</strong><p>Protection of positions, investor data and commercially sensitive activity.</p></div>
+              <div><span>SCALE</span><strong>Claim-based payments</strong><p>Record-date snapshots and scalable distribution instead of holder loops.</p></div>
+              <div><span>INTEGRATION</span><strong>Capital-markets stack</strong><p>Connections to treasury, custody, CSD, trading and reporting systems.</p></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <footer><strong>Prototype · Educational use only</strong><p>Each browser receives temporary isolated state. The prototype is not audited, legally binding or production-ready, and uses no real money, securities or investor data.</p></footer>
+    </main>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>

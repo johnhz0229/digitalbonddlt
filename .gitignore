@@ -1,0 +1,8 @@
+node_modules/
+.npm-cache/
+.chrome-profile*/
+.runtime-tmp/
+artifacts/
+cache/
+coverage/
+.env

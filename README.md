@@ -1,5 +1,7 @@
 # Permissioned Tokenized Bond Prototype
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/johnhz0229/digitalbonddlt)
+
 An educational Solidity prototype showing the lifecycle of a simple fixed-rate digital bond: investor whitelisting, issuance, permissioned transfer, coupon payment, redemption funding and principal repayment.
 
 The project is designed as a capital-markets learning exercise and as evidence of requirements engineering, implementation and testing. It is **not production-ready, not audited, not legal advice and not an investment product**. Native test-network currency is used only as a stand-in for cash.

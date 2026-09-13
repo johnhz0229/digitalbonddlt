@@ -62,14 +62,14 @@ terms.
 
 ## Public deployment
 
-The demo is prepared for a Node.js 22 web service. Each browser receives an
+The demo is prepared for a Node.js 20 web service. Each browser receives an
 isolated in-memory ledger identified by an HTTP-only session cookie; inactive
 ledgers expire after 30 minutes, and no wallet, private key or real asset is
 accepted from the visitor.
 
 For Render, push the repository to GitHub and create a new Blueprint from the
-included `render.yaml`. Render will compile the contract, start the service,
-check `/health` and provide an HTTPS URL. A standard `Dockerfile` is also
+included `render.yaml`. Render installs only runtime dependencies, uses the
+verified contract artifact, checks `/health` and provides an HTTPS URL. A standard `Dockerfile` is also
 included for Railway, Fly.io or another container host.
 
 Cloud demo state is intentionally temporary. A service restart or idle-session

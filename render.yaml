@@ -3,12 +3,12 @@ services:
     name: tokenized-bond-demo
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --omit=dev
     startCommand: npm start
     healthCheckPath: /health
     envVars:
       - key: NODE_VERSION
-        value: 22.14.0
+        value: 20.18.1
       - key: HOST
         value: 0.0.0.0
       - key: SESSION_MINUTES

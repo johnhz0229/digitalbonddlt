@@ -4,7 +4,6 @@ node_modules
 .runtime-tmp
 .git
 cache
-artifacts
 coverage
 dashboard-preview.png
 *.zip

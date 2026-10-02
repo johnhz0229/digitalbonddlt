@@ -44,6 +44,7 @@
       <nav class="view-tabs" aria-label="Project views">
         <button class="tab active" data-tab="overview" aria-selected="true">Overview</button>
         <button class="tab" data-tab="demo" aria-selected="false">Live workflow</button>
+        <button class="tab" data-tab="crosschain" aria-selected="false">Cross-chain DvP</button>
         <button class="tab" data-tab="requirements" aria-selected="false">Requirements</button>
         <button class="tab" data-tab="assurance" aria-selected="false">Testing & risks</button>
       </nav>
@@ -129,6 +130,64 @@
         </section>
       </section>
 
+      <section class="view" data-view="crosschain">
+        <div class="overview-grid">
+          <article class="story-card dark-card">
+            <p class="overline light">THE PROBLEM</p>
+            <h2>The bond and the cash live on two different ledgers.</h2>
+            <p>On one ledger, DvP is one transaction. Across two ledgers there is no shared transaction, so one leg could settle without the other. Hash time-locked contracts bridge this with deadlines, which gives the seller a free option and puts the buyer at risk if a deadline is missed.</p>
+          </article>
+          <article class="story-card">
+            <p class="overline">THE IDEA (ERC-7573, SIMPLIFIED)</p>
+            <h2>Lock the bond against two keys. Let the payment decide which key is revealed.</h2>
+            <div class="value-list">
+              <div><span>01</span><p><strong>Each party writes the other's key</strong>Nobody holds the plaintext of the key that would benefit themselves.</p></div>
+              <div><span>02</span><p><strong>The payment outcome picks the key</strong>Paid: the buyer's key. Failed or cancelled: the seller's key. Never both.</p></div>
+              <div><span>03</span><p><strong>A stateless oracle decrypts</strong>It only sees one encrypted key per request and stores nothing.</p></div>
+              <div><span>04</span><p><strong>No time-lock</strong>The seller can cancel an unpaid trade at any time.</p></div>
+            </div>
+          </article>
+        </div>
+
+        <section class="instrument-builder">
+          <div class="builder-heading">
+            <span class="builder-step">⇄</span>
+            <div><p class="overline">TRADE TERMS</p><h3>Alice sells bonds to Bob across two ledgers</h3><p>Bob holds EUR 5,000 on the payment chain. Choose a price above that to see the failure path.</p></div>
+          </div>
+          <div class="builder-fields cross-fields">
+            <label><span>Units</span><input id="cross-units" type="number" value="10" min="1" max="20" /></label>
+            <label><span>Price</span><div class="input-suffix"><input id="cross-price" type="number" value="1000" min="0.01" step="0.01" /><b>EUR</b></div></label>
+            <button class="button deploy-button" id="cross-reset">Start new trade</button>
+          </div>
+        </section>
+
+        <section class="content-grid">
+          <div class="main-column">
+            <div class="cross-steps" id="cross-steps"><div class="empty-state">Loading the two ledgers…</div></div>
+            <div class="cross-actions" id="cross-actions"></div>
+          </div>
+          <aside class="side-column">
+            <section class="panel">
+              <div class="panel-title"><div><p class="overline">LEDGER A · CHAIN 7001</p><h2>Asset chain</h2></div><span class="chain-tag asset">BOND</span></div>
+              <div class="ledger-rows" id="cross-asset"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-title"><div><p class="overline">LEDGER B · CHAIN 7002</p><h2>Payment chain</h2></div><span class="chain-tag payment">tEUR</span></div>
+              <div class="ledger-rows" id="cross-payment"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-title"><div><p class="overline">WHO KNOWS WHAT</p><h2>The two keys</h2></div></div>
+              <div id="cross-keys" class="key-list"><div class="empty-state">Keys appear after step 1.</div></div>
+            </section>
+          </aside>
+        </section>
+
+        <article class="wide-card">
+          <div class="card-intro"><p class="overline">PROTOCOL LOG</p><h2>What happened, on which ledger</h2></div>
+          <div id="cross-log" class="activity-list cross-log"></div>
+        </article>
+      </section>
+
       <section class="view" data-view="requirements">
         <article class="wide-card">
           <div class="card-intro split-intro"><div><p class="overline">REQUIREMENTS ENGINEERING</p><h2>From business rule to tested implementation</h2></div><p>Each requirement is expressed as a user outcome, implemented as contract logic and covered by an acceptance test.</p></div>
@@ -139,6 +198,7 @@
             <div><strong>Transfers remain permissioned</strong><span>Holder transfers only to approved party</span><code>transfer()</code><span class="pass">✓ Invalid recipient rejected</span></div>
             <div><strong>AC1 · Both legs settle together</strong><span>Seller never delivers without being paid</span><code>DvPSettlement.settle()</code><span class="pass">✓ Bonds and cash swap in one transaction</span></div>
             <div><strong>AC2–AC4 · Failures are recorded</strong><span>Operations sees every failed attempt and why</span><code>checkSettlement()</code><span class="pass">✓ Reason stored, no balance moves</span></div>
+            <div><strong>Cross-chain · no time-lock</strong><span>Seller can always recover unpaid bonds; buyer gets bonds once paid</span><code>transferAndDecrypt()</code><span class="pass">✓ Success, failure and cancel paths</span></div>
             <div><strong>AC5 · Same terms on both sides</strong><span>Buyer confirms exactly what seller proposed</span><code>confirmTrade()</code><span class="pass">✓ Mismatched terms rejected</span></div>
             <div><strong>Coupon follows instrument terms</strong><span>Current holders receive scheduled cashflow</span><code>payCoupon()</code><span class="pass">✓ Timing and amount checked</span></div>
             <div><strong>Principal is returned once</strong><span>Holder redeems units after maturity</span><code>redeem()</code><span class="pass">✓ Units burned on payment</span></div>
@@ -160,13 +220,15 @@
       <section class="view" data-view="assurance">
         <div class="assurance-grid">
           <article class="wide-card tests-card">
-            <div class="card-intro"><p class="overline">AUTOMATED ACCEPTANCE TESTS</p><div class="score-line"><h2>17 scenarios verified</h2><strong>17/17</strong></div><p>The suite covers both successful lifecycle events and controls that must reject invalid actions.</p></div>
+            <div class="card-intro"><p class="overline">AUTOMATED ACCEPTANCE TESTS</p><div class="score-line"><h2>29 scenarios verified</h2><strong>29/29</strong></div><p>The suite covers both successful lifecycle events and controls that must reject invalid actions.</p></div>
             <div class="test-list">
               <div><span>PASS</span><p><strong>Issuer authority</strong>Only the issuer can approve investors and allocate units.</p></div>
               <div><span>PASS</span><p><strong>Transfer restriction</strong>Unapproved recipients cannot receive the security.</p></div>
               <div><span>PASS</span><p><strong>Atomic DvP</strong>Bonds and tokenised euro change hands in one transaction, never one without the other.</p></div>
               <div><span>PASS</span><p><strong>Recorded settlement failures</strong>Missing cash, bonds, authorisation or KYC status is stored as a reason; balances stay unchanged.</p></div>
               <div><span>PASS</span><p><strong>Matching terms</strong>The buyer must confirm exactly the proposed units and price.</p></div>
+              <div><span>PASS</span><p><strong>Cross-chain DvP</strong>Paid: the buyer key delivers the bonds. Failed or cancelled: the seller key returns them. Only one key is ever released.</p></div>
+              <div><span>PASS</span><p><strong>Cheating attempts blocked</strong>Forged keys, swapped failure keys, wrong-direction keys and non-oracle releases are rejected.</p></div>
               <div><span>PASS</span><p><strong>Coupon distribution</strong>Payment follows current holdings at the scheduled date.</p></div>
               <div><span>PASS</span><p><strong>Payment validation</strong>An incorrectly funded coupon is rejected.</p></div>
               <div><span>PASS</span><p><strong>Maturity redemption</strong>Principal is funded, paid and units are burned.</p></div>

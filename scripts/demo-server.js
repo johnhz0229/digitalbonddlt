@@ -13,6 +13,9 @@ const { ethers } = require("ethers");
 const bondArtifact = require("../artifacts/contracts/TokenizedBond.sol/TokenizedBond.json");
 const cashArtifact = require("../artifacts/contracts/TokenisedEuro.sol/TokenisedEuro.json");
 const dvpArtifact = require("../artifacts/contracts/DvPSettlement.sol/DvPSettlement.json");
+const lockingArtifact = require("../artifacts/contracts/AssetLockingContract.sol/AssetLockingContract.json");
+const paymentArtifact = require("../artifacts/contracts/PaymentDecryptionContract.sol/PaymentDecryptionContract.json");
+const { CrossChainScenario } = require("./lib/crosschain-scenario");
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -96,6 +99,7 @@ function actor(context, name) {
 }
 
 async function closeLedger(context) {
+  if (context.cross) await context.cross.close();
   if (context.rawProvider && typeof context.rawProvider.disconnect === "function") {
     await context.rawProvider.disconnect();
   }
@@ -167,6 +171,7 @@ async function createSession() {
     rawProvider: null,
   };
   await initializeLedger(context, context.currentConfig);
+  context.cross = await CrossChainScenario.create();
   sessions.set(context.id, context);
   return context;
 }
@@ -419,7 +424,7 @@ async function transact(context, action, params = {}) {
   }
 }
 
-const contractInterfaces = [bondArtifact, cashArtifact, dvpArtifact].map((artifact) => new ethers.Interface(artifact.abi));
+const contractInterfaces = [bondArtifact, cashArtifact, dvpArtifact, lockingArtifact, paymentArtifact].map((artifact) => new ethers.Interface(artifact.abi));
 
 // Ganache nests revert data where ethers does not look, so decode custom errors here.
 function revertReason(error) {
@@ -499,6 +504,22 @@ async function handleRequest(request, response) {
       context.queue = context.queue.catch(() => {}).then(() => transact(context, body.action, body.params));
       await context.queue;
       return sendJson(response, 200, { ok: true, state: await state(context) }, isNew ? context.id : null);
+    }
+    if (request.method === "GET" && requestUrl.pathname === "/api/cross/state") {
+      const { context, isNew } = await getSession(request);
+      return sendJson(response, 200, await context.cross.state(), isNew ? context.id : null);
+    }
+    if (request.method === "POST" && requestUrl.pathname === "/api/cross/action") {
+      const { context, isNew } = await getSession(request);
+      const body = await readBody(request);
+      const params = body.params || {};
+      context.queue = context.queue.catch(() => {}).then(() => (
+        body.action === "reset"
+          ? context.cross.reset({ units: params.units, priceEur: params.priceEur })
+          : context.cross.run(String(body.action), params.option === "cancel" ? "cancel" : "pay")
+      ));
+      await context.queue;
+      return sendJson(response, 200, { ok: true, state: await context.cross.state() }, isNew ? context.id : null);
     }
     if (request.method === "GET") return serveFile(requestUrl.pathname, response);
     sendJson(response, 404, { error: "Not found" });

@@ -15,6 +15,7 @@ A corporate or bank issuer creates a one-year bond with a fixed face value and a
 - Permissioned transfers between approved investors
 - Atomic DvP settlement of bond units against a demo tokenised euro (`DvPSettlement`)
 - Recorded settlement failures with a reason (missing cash, bonds, authorisation or KYC status), so operations sees every attempt
+- Cross-chain DvP without time-locks, simplified from ERC-7573 (Fries, Kohl-Landgraf; draft): the bond is locked on an asset chain against two key hashes, the payment chain decides which encrypted key a stateless decryption oracle releases
 - Fixed coupon calculation using basis points
 - Scheduled coupon distribution
 - Maturity check and redemption funding
@@ -60,6 +61,31 @@ In **Live workflow**, the Instrument Builder can deploy a fresh contract with a
 custom bond name, symbol, face value, annual coupon, payment frequency and
 maturity. All later issuance, coupon and redemption results use the selected
 terms.
+
+## Cross-chain DvP (ERC-7573 style)
+
+When the bond and the cash live on different ledgers, there is no shared
+transaction to make settlement atomic. This prototype follows the idea of
+ERC-7573:
+
+1. Each party generates the *other* party's key, so nobody holds the key that
+   would benefit themselves.
+2. The asset chain locks the bond against the hashes of both keys.
+3. The payment chain stores both keys encrypted for an oracle. A successful
+   payment requests the buyer's key; a failed or cancelled payment requests the
+   seller's key. Only one key is ever requested.
+4. A stateless oracle decrypts that one key and publishes it. Whoever submits
+   it on the asset chain moves the bond in the direction the key encodes.
+
+Run it on two separate local ledgers in the terminal (success, failed payment
+and cancellation):
+
+```bash
+npm run crosschain
+```
+
+or step through it in the dashboard's **Cross-chain DvP** tab, which shows both
+ledgers and who knows which key at each step.
 
 ## Public deployment
 
@@ -107,7 +133,14 @@ contracts/TokenisedEuro.sol       Demo cash token (stand-in for a tokenised depo
 contracts/DvPSettlement.sol       Delivery-versus-payment between bond and cash token
 test/TokenizedBond.test.js        Bond lifecycle tests
 test/DvPSettlement.test.js        DvP tests, one block per acceptance criterion
+contracts/AssetLockingContract.sol       Asset-chain side of cross-chain DvP (ERC-7573 style)
+contracts/PaymentDecryptionContract.sol  Payment-chain side: pays and requests one key
+scripts/lib/erc7573.js            Key documents, encryption and the stateless decryption oracle
+scripts/lib/crosschain-scenario.js Two-ledger protocol used by the terminal demo and dashboard
+scripts/crosschain-demo.js        Terminal walkthrough of three cross-chain scenarios
+test/CrossChainDvP.test.js        Cross-chain success, failure, cancellation and attack tests
 docs/learn/01-dvp.md              Study notes: DvP from business problem to code (Chinese)
+docs/learn/03-crosschain-dvp.md   Study notes: cross-chain DvP and ERC-7573 (Chinese)
 scripts/deploy.js                 Local deployment example
 scripts/demo-server.js            Local ledger and dashboard API
 public/                            Interactive browser dashboard
@@ -124,7 +157,7 @@ Other omitted production requirements include:
 - formal role-based access control and multisignature governance;
 - legally binding investor identity and KYC/AML integration;
 - a legally backed cash leg (the demo tokenised euro has none) or a trigger to central bank money in T2;
-- cross-ledger DvP when bond and cash live on different ledgers (see ERC-7573);
+- a production oracle (threshold decryption, key management) and real ledger connectivity for cross-chain DvP;
 - pause, recovery, forced transfer and key-loss processes;
 - day-count conventions, business-day calendars and precise coupon schedules;
 - privacy, data protection and regulatory reporting;

@@ -10,7 +10,8 @@
     "demo": "npm run build && node scripts/demo-server.js",
     "start": "node scripts/demo-server.js",
     "deploy:local": "hardhat run scripts/deploy.js --network localhost",
-    "crosschain": "node scripts/crosschain-demo.js"
+    "crosschain": "node scripts/crosschain-demo.js",
+    "coupon": "node scripts/coupon-demo.js"
   },
   "engines": {
     "node": ">=20 <21"

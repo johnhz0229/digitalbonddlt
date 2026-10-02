@@ -203,6 +203,11 @@ contract TokenizedBond {
         return holders.length;
     }
 
+    /// @notice Lets a servicing contract read the holder register at a record date.
+    function holderAt(uint256 index) external view returns (address) {
+        return holders[index];
+    }
+
     function _registerHolder(address investor) private {
         if (!hasBeenHolder[investor]) {
             hasBeenHolder[investor] = true;

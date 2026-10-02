@@ -14,16 +14,17 @@ function createOracleKeyPair() {
 }
 
 /**
- * A key is a small document naming the trade it belongs to and who it releases
- * the bond to. The random nonce makes it unguessable; its keccak256 hash is what
- * the asset chain stores.
+ * A key is a small document naming the contract and transfer it belongs to and
+ * the payment outcome it stands for. For DvP the success key is the buyer's
+ * claim key and the failure key is the seller's reclaim key. The random nonce
+ * makes it unguessable; its keccak256 hash is what the asset chain stores.
  */
-function createKeyDocument({ lockingContract, id, releaseTo }) {
-  if (!["buyer", "seller"].includes(releaseTo)) throw new Error("releaseTo must be buyer or seller");
+function createKeyDocument({ contract, id, outcome }) {
+  if (!["success", "failure"].includes(outcome)) throw new Error("outcome must be success or failure");
   const document = {
-    contract: ethers.getAddress(lockingContract),
+    contract: ethers.getAddress(contract),
     id: String(id),
-    releaseTo,
+    outcome,
     nonce: crypto.randomBytes(16).toString("hex"),
   };
   return Buffer.from(JSON.stringify(document), "utf8");
@@ -42,8 +43,8 @@ function encryptForOracle(oraclePublicKey, key) {
  * the hash for the asset chain and the ciphertext for the payment chain.
  * Only the generating party ever sees `plaintext`.
  */
-function prepareKey({ oraclePublicKey, lockingContract, id, releaseTo }) {
-  const plaintext = createKeyDocument({ lockingContract, id, releaseTo });
+function prepareKey({ oraclePublicKey, contract, id, outcome }) {
+  const plaintext = createKeyDocument({ contract, id, outcome });
   return {
     plaintext,
     hash: hashKey(plaintext),
@@ -53,13 +54,28 @@ function prepareKey({ oraclePublicKey, lockingContract, id, releaseTo }) {
 
 /**
  * Stateless decryption oracle. It keeps no record of trades: everything it needs
- * arrives with the request. It refuses keys that belong to another trade, or a
- * key whose direction does not match the payment outcome.
+ * arrives with the request. It refuses keys that belong to another contract or
+ * transfer, or a key whose outcome does not match the payment outcome.
  */
 class DecryptionOracle {
-  constructor({ privateKey, lockingContract }) {
+  constructor({ privateKey, publicKey, contracts }) {
     this.privateKey = privateKey;
-    this.lockingContract = ethers.getAddress(lockingContract);
+    this.publicKey = publicKey;
+    this.contracts = new Set(contracts.map((address) => ethers.getAddress(address)));
+  }
+
+  /**
+   * Generates a success and a failure key for one transfer, as in the March 2026
+   * pilot. Only hashes and ciphertexts leave this function; the plaintexts are
+   * discarded, so no participant (and not the oracle's storage) holds a preimage.
+   */
+  generateOutcomeKeys({ contract, id }) {
+    if (!this.publicKey) throw new Error("Oracle needs its public key to generate keys");
+    const make = (outcome) => {
+      const { hash, encrypted } = prepareKey({ oraclePublicKey: this.publicKey, contract, id, outcome });
+      return { hash, encrypted };
+    };
+    return { success: make("success"), failure: make("failure") };
   }
 
   decrypt({ id, success, encryptedKey }) {
@@ -75,10 +91,10 @@ class DecryptionOracle {
     } catch {
       throw new Error("Oracle refused: key is not a valid key document");
     }
-    if (document.contract !== this.lockingContract) throw new Error("Oracle refused: key is for another contract");
-    if (document.id !== String(id)) throw new Error("Oracle refused: key is for another trade");
-    const expected = success ? "buyer" : "seller";
-    if (document.releaseTo !== expected) throw new Error(`Oracle refused: payment ${success ? "succeeded" : "failed"} but key releases to ${document.releaseTo}`);
+    if (!this.contracts.has(document.contract)) throw new Error("Oracle refused: key is for another contract");
+    if (document.id !== String(id)) throw new Error("Oracle refused: key is for another transfer");
+    const expected = success ? "success" : "failure";
+    if (document.outcome !== expected) throw new Error(`Oracle refused: payment ${success ? "succeeded" : "failed"} but this is the ${document.outcome} key`);
     return plaintext;
   }
 

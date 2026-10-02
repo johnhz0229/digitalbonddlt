@@ -96,7 +96,7 @@ class CrossChainScenario {
     await (await this.cash.mint(await bobP.getAddress(), toCents(BUYER_CASH_EUR))).wait();
 
     this.oracleSigner = oracleSigner;
-    this.oracle = new DecryptionOracle({ privateKey: oracleKeys().privateKey, lockingContract: await this.locking.getAddress() });
+    this.oracle = new DecryptionOracle({ privateKey: oracleKeys().privateKey, contracts: [await this.locking.getAddress()] });
     this.note("system", `Two separate ledgers started: asset chain (id 7001) holds the bond, payment chain (id 7002) holds tokenised euro. Alice owns ${SELLER_BONDS} bonds; Bob owns EUR ${BUYER_CASH_EUR.toLocaleString("en-GB")}.`);
     this.note("system", `Trade: Alice sells ${unitsInt} bonds to Bob for EUR ${price.toLocaleString("en-GB")}.`);
   }
@@ -126,10 +126,10 @@ class CrossChainScenario {
   }
 
   async step_keys() {
-    const params = { oraclePublicKey: oracleKeys().publicKey, lockingContract: await this.locking.getAddress(), id: this.terms.id };
-    // Alice generates the key that will let BOB claim; Bob generates the key that lets ALICE reclaim.
-    const buyerKey = prepareKey({ ...params, releaseTo: "buyer" });
-    const sellerKey = prepareKey({ ...params, releaseTo: "seller" });
+    const params = { oraclePublicKey: oracleKeys().publicKey, contract: await this.locking.getAddress(), id: this.terms.id };
+    // Alice generates the success key that will let BOB claim; Bob generates the failure key that lets ALICE reclaim.
+    const buyerKey = prepareKey({ ...params, outcome: "success" });
+    const sellerKey = prepareKey({ ...params, outcome: "failure" });
     this.keys = { buyerKey, sellerKey };
     this.note("keys", `Alice generated Bob's claim key and shares only its hash ${short(buyerKey.hash)} and its encryption for the oracle.`);
     this.note("keys", `Bob generated Alice's reclaim key and shares only its hash ${short(sellerKey.hash)} and its encryption for the oracle.`);
@@ -186,8 +186,8 @@ class CrossChainScenario {
   async step_oracle() {
     const [released] = await this.oracle.handleReceipt(this.paymentContract.connect(this.oracleSigner), this.pendingReceipt);
     this.released = released;
-    const document = JSON.parse(Buffer.from(ethers.getBytes(released.key)).toString("utf8"));
-    this.note("oracle", `Oracle decrypted the ${released.success ? "success" : "failure"} key (releases to ${document.releaseTo}) and published it with releaseKey. It stored nothing about the trade.`, "payment", released.txHash);
+    const receiver = released.success ? "Bob" : "Alice";
+    this.note("oracle", `Oracle decrypted the ${released.success ? "success" : "failure"} key (moves the bonds to ${receiver}) and published it with releaseKey. It stored nothing about the trade.`, "payment", released.txHash);
   }
 
   async step_settle() {
@@ -236,4 +236,4 @@ class CrossChainScenario {
   }
 }
 
-module.exports = { CrossChainScenario, STEPS };
+module.exports = { CrossChainScenario, STEPS, oracleKeys, startLedger, deploy, toCents };

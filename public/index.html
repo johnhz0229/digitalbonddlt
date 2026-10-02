@@ -45,6 +45,7 @@
         <button class="tab active" data-tab="overview" aria-selected="true">Overview</button>
         <button class="tab" data-tab="demo" aria-selected="false">Live workflow</button>
         <button class="tab" data-tab="crosschain" aria-selected="false">Cross-chain DvP</button>
+        <button class="tab" data-tab="coupon" aria-selected="false">Coupon discharge</button>
         <button class="tab" data-tab="requirements" aria-selected="false">Requirements</button>
         <button class="tab" data-tab="assurance" aria-selected="false">Testing & risks</button>
       </nav>
@@ -188,6 +189,53 @@
         </article>
       </section>
 
+      <section class="view" data-view="coupon">
+        <div class="overview-grid">
+          <article class="story-card dark-card">
+            <p class="overline light">THE QUESTION</p>
+            <h2>When is a coupon really paid?</h2>
+            <p>The cash moves on a payment ledger; the debt lives on the bond. If the bond trusted a reported "paid" status, a wrong or forged status could wipe out an investor's claim. The bond needs proof it can verify itself.</p>
+          </article>
+          <article class="story-card">
+            <p class="overline">PAYMENT VERSUS DISCHARGE</p>
+            <h2>The claim is discharged only when the bond accepts the success key.</h2>
+            <div class="value-list">
+              <div><span>01</span><p><strong>Record date fixes the claim</strong>Later transfers do not change who is owed this coupon.</p></div>
+              <div><span>02</span><p><strong>The outcome commitment is frozen</strong>The oracle generates both keys; the bond stores only their hashes. Nobody knows a preimage.</p></div>
+              <div><span>03</span><p><strong>Failure closes the attempt, not the claim</strong>The claim stays outstanding and a fresh attempt can follow.</p></div>
+              <div><span>04</span><p><strong>Forwarding is safe to repeat</strong>A connector that timed out can simply send the key again.</p></div>
+            </div>
+          </article>
+        </div>
+
+        <section class="content-grid">
+          <div class="main-column">
+            <div class="cross-steps" id="coupon-steps"><div class="empty-state">Loading the two ledgers…</div></div>
+            <div class="cross-actions" id="coupon-actions"></div>
+          </div>
+          <aside class="side-column">
+            <section class="panel">
+              <div class="panel-title"><div><p class="overline">ASSET CHAIN · THE DEBT</p><h2>Alice's coupon claim</h2></div><span class="chain-tag asset">BOND</span></div>
+              <div class="claim-status" id="coupon-claim">—</div>
+              <div class="ledger-rows" id="coupon-bond"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-title"><div><p class="overline">PAYMENT CHAIN · THE CASH</p><h2>Coupon payment</h2></div><span class="chain-tag payment">tEUR</span></div>
+              <div class="ledger-rows" id="coupon-payment"></div>
+            </section>
+            <section class="panel">
+              <div class="panel-title"><div><p class="overline">RELEASED BY THE ORACLE</p><h2>Outcome key</h2></div></div>
+              <div id="coupon-key" class="key-list"><div class="empty-state">No key released yet.</div></div>
+            </section>
+          </aside>
+        </section>
+
+        <article class="wide-card">
+          <div class="card-intro split-intro"><div><p class="overline">PROTOCOL LOG</p><h2>What happened, on which ledger</h2></div><button class="button button-outline" id="coupon-reset">Reset coupon scenario</button></div>
+          <div id="coupon-log" class="activity-list cross-log"></div>
+        </article>
+      </section>
+
       <section class="view" data-view="requirements">
         <article class="wide-card">
           <div class="card-intro split-intro"><div><p class="overline">REQUIREMENTS ENGINEERING</p><h2>From business rule to tested implementation</h2></div><p>Each requirement is expressed as a user outcome, implemented as contract logic and covered by an acceptance test.</p></div>
@@ -199,6 +247,7 @@
             <div><strong>AC1 · Both legs settle together</strong><span>Seller never delivers without being paid</span><code>DvPSettlement.settle()</code><span class="pass">✓ Bonds and cash swap in one transaction</span></div>
             <div><strong>AC2–AC4 · Failures are recorded</strong><span>Operations sees every failed attempt and why</span><code>checkSettlement()</code><span class="pass">✓ Reason stored, no balance moves</span></div>
             <div><strong>Cross-chain · no time-lock</strong><span>Seller can always recover unpaid bonds; buyer gets bonds once paid</span><code>transferAndDecrypt()</code><span class="pass">✓ Success, failure and cancel paths</span></div>
+            <div><strong>Coupon is paid only when proven</strong><span>Investor's claim survives any failed or unproven payment</span><code>CouponDischarge.submitOutcome()</code><span class="pass">✓ Discharge, retry and forgery cases</span></div>
             <div><strong>AC5 · Same terms on both sides</strong><span>Buyer confirms exactly what seller proposed</span><code>confirmTrade()</code><span class="pass">✓ Mismatched terms rejected</span></div>
             <div><strong>Coupon follows instrument terms</strong><span>Current holders receive scheduled cashflow</span><code>payCoupon()</code><span class="pass">✓ Timing and amount checked</span></div>
             <div><strong>Principal is returned once</strong><span>Holder redeems units after maturity</span><code>redeem()</code><span class="pass">✓ Units burned on payment</span></div>
@@ -220,7 +269,7 @@
       <section class="view" data-view="assurance">
         <div class="assurance-grid">
           <article class="wide-card tests-card">
-            <div class="card-intro"><p class="overline">AUTOMATED ACCEPTANCE TESTS</p><div class="score-line"><h2>29 scenarios verified</h2><strong>29/29</strong></div><p>The suite covers both successful lifecycle events and controls that must reject invalid actions.</p></div>
+            <div class="card-intro"><p class="overline">AUTOMATED ACCEPTANCE TESTS</p><div class="score-line"><h2>37 scenarios verified</h2><strong>37/37</strong></div><p>The suite covers both successful lifecycle events and controls that must reject invalid actions.</p></div>
             <div class="test-list">
               <div><span>PASS</span><p><strong>Issuer authority</strong>Only the issuer can approve investors and allocate units.</p></div>
               <div><span>PASS</span><p><strong>Transfer restriction</strong>Unapproved recipients cannot receive the security.</p></div>
@@ -228,6 +277,7 @@
               <div><span>PASS</span><p><strong>Recorded settlement failures</strong>Missing cash, bonds, authorisation or KYC status is stored as a reason; balances stay unchanged.</p></div>
               <div><span>PASS</span><p><strong>Matching terms</strong>The buyer must confirm exactly the proposed units and price.</p></div>
               <div><span>PASS</span><p><strong>Cross-chain DvP</strong>Paid: the buyer key delivers the bonds. Failed or cancelled: the seller key returns them. Only one key is ever released.</p></div>
+              <div><span>PASS</span><p><strong>Payment versus discharge</strong>A paid status alone leaves the coupon outstanding; only the accepted success key discharges it. A failure keeps the claim and allows a retry.</p></div>
               <div><span>PASS</span><p><strong>Cheating attempts blocked</strong>Forged keys, swapped failure keys, wrong-direction keys and non-oracle releases are rejected.</p></div>
               <div><span>PASS</span><p><strong>Coupon distribution</strong>Payment follows current holdings at the scheduled date.</p></div>
               <div><span>PASS</span><p><strong>Payment validation</strong>An incorrectly funded coupon is rejected.</p></div>

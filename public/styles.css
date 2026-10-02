@@ -313,3 +313,6 @@ footer p { margin-bottom: 0; }
   .cross-step { grid-template-columns: 30px 1fr; padding: 14px 16px; }
   .cross-step .chain-tag { grid-column: 2; justify-self: start; }
 }
+.claim-status { margin: -6px 0 14px; padding: 12px 14px; border-radius: 7px; font-size: 15px; font-weight: 800; letter-spacing: .04em; text-align: center; color: var(--muted); background: var(--canvas); }
+.claim-status.outstanding { color: var(--warning); background: #fdf3df; }
+.claim-status.discharged { color: var(--success); background: var(--success-bg); }

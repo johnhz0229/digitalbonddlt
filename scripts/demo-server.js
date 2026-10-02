@@ -16,6 +16,8 @@ const dvpArtifact = require("../artifacts/contracts/DvPSettlement.sol/DvPSettlem
 const lockingArtifact = require("../artifacts/contracts/AssetLockingContract.sol/AssetLockingContract.json");
 const paymentArtifact = require("../artifacts/contracts/PaymentDecryptionContract.sol/PaymentDecryptionContract.json");
 const { CrossChainScenario } = require("./lib/crosschain-scenario");
+const { CouponScenario } = require("./lib/coupon-scenario");
+const couponArtifact = require("../artifacts/contracts/CouponDischarge.sol/CouponDischarge.json");
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -100,6 +102,7 @@ function actor(context, name) {
 
 async function closeLedger(context) {
   if (context.cross) await context.cross.close();
+  if (context.coupon) await context.coupon.close();
   if (context.rawProvider && typeof context.rawProvider.disconnect === "function") {
     await context.rawProvider.disconnect();
   }
@@ -172,6 +175,7 @@ async function createSession() {
   };
   await initializeLedger(context, context.currentConfig);
   context.cross = await CrossChainScenario.create();
+  context.coupon = await CouponScenario.create();
   sessions.set(context.id, context);
   return context;
 }
@@ -424,7 +428,7 @@ async function transact(context, action, params = {}) {
   }
 }
 
-const contractInterfaces = [bondArtifact, cashArtifact, dvpArtifact, lockingArtifact, paymentArtifact].map((artifact) => new ethers.Interface(artifact.abi));
+const contractInterfaces = [bondArtifact, cashArtifact, dvpArtifact, lockingArtifact, paymentArtifact, couponArtifact].map((artifact) => new ethers.Interface(artifact.abi));
 
 // Ganache nests revert data where ethers does not look, so decode custom errors here.
 function revertReason(error) {
@@ -505,21 +509,26 @@ async function handleRequest(request, response) {
       await context.queue;
       return sendJson(response, 200, { ok: true, state: await state(context) }, isNew ? context.id : null);
     }
-    if (request.method === "GET" && requestUrl.pathname === "/api/cross/state") {
+    const scenarioRoute = requestUrl.pathname.match(/^\/api\/(cross|coupon)\/(state|action)$/);
+    if (scenarioRoute) {
+      const [, name, kind] = scenarioRoute;
       const { context, isNew } = await getSession(request);
-      return sendJson(response, 200, await context.cross.state(), isNew ? context.id : null);
-    }
-    if (request.method === "POST" && requestUrl.pathname === "/api/cross/action") {
-      const { context, isNew } = await getSession(request);
-      const body = await readBody(request);
-      const params = body.params || {};
-      context.queue = context.queue.catch(() => {}).then(() => (
-        body.action === "reset"
-          ? context.cross.reset({ units: params.units, priceEur: params.priceEur })
-          : context.cross.run(String(body.action), params.option === "cancel" ? "cancel" : "pay")
-      ));
-      await context.queue;
-      return sendJson(response, 200, { ok: true, state: await context.cross.state() }, isNew ? context.id : null);
+      const scenario = context[name];
+      if (kind === "action" && request.method === "POST") {
+        const body = await readBody(request);
+        const params = body.params || {};
+        const option = ["cancel", "fail"].includes(params.option) ? params.option : "pay";
+        context.queue = context.queue.catch(() => {}).then(() => (
+          body.action === "reset"
+            ? scenario.reset(name === "cross" ? { units: params.units, priceEur: params.priceEur } : {})
+            : scenario.run(String(body.action), option)
+        ));
+        await context.queue;
+        return sendJson(response, 200, { ok: true, state: await scenario.state() }, isNew ? context.id : null);
+      }
+      if (kind === "state" && request.method === "GET") {
+        return sendJson(response, 200, await scenario.state(), isNew ? context.id : null);
+      }
     }
     if (request.method === "GET") return serveFile(requestUrl.pathname, response);
     sendJson(response, 404, { error: "Not found" });

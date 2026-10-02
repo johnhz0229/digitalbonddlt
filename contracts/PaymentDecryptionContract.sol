@@ -106,11 +106,11 @@ contract PaymentDecryptionContract {
         if (msg.sender != p.buyer && msg.sender != p.seller) revert NotCounterparty();
 
         if (cash.balanceOf(p.buyer) < p.amount) {
-            _fail(id, p, "Buyer has insufficient cash");
+            _fail(id, p, "Payer has insufficient cash");
             return;
         }
         if (cash.allowance(p.buyer, address(this)) < p.amount) {
-            _fail(id, p, "Buyer has not authorised the cash");
+            _fail(id, p, "Payer has not authorised the cash");
             return;
         }
 

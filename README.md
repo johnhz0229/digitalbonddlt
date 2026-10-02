@@ -15,6 +15,7 @@ A corporate or bank issuer creates a one-year bond with a fixed face value and a
 - Permissioned transfers between approved investors
 - Atomic DvP settlement of bond units against a demo tokenised euro (`DvPSettlement`)
 - Recorded settlement failures with a reason (missing cash, bonds, authorisation or KYC status), so operations sees every attempt
+- Coupon servicing as payment versus discharge: a coupon claim fixed at the record date is discharged only when the bond accepts the success preimage released after the cash moved; a failure closes the attempt but keeps the claim
 - Cross-chain DvP without time-locks, simplified from ERC-7573 (Fries, Kohl-Landgraf; draft): the bond is locked on an asset chain against two key hashes, the payment chain decides which encrypted key a stateless decryption oracle releases
 - Fixed coupon calculation using basis points
 - Scheduled coupon distribution
@@ -87,6 +88,27 @@ npm run crosschain
 or step through it in the dashboard's **Cross-chain DvP** tab, which shows both
 ledgers and who knows which key at each step.
 
+## Coupon: payment versus discharge
+
+A reported "paid" status should not be enough to wipe out an investor's claim.
+`CouponDischarge` fixes each holder's claim at the record date, then for each
+settlement attempt freezes the hashes of a success key and a failure key that
+the oracle generated (and immediately forgot, as in the March 2026 DZ BANK /
+KfW Smart Bond Contract pilot). The cash moves on the payment ledger; the
+oracle reveals one key; the bond:
+
+- discharges the claim only when it accepts the success preimage;
+- closes the attempt but keeps the claim open on a failure preimage;
+- treats a repeated forward of the same key as a no-op, so connectors can retry.
+
+```bash
+npm run coupon
+```
+
+or use the dashboard's **Coupon discharge** tab. This is an educational reading
+of the abstract of Fries, Kohl-Landgraf and Prandtl (2026), "Participant-Operated
+Settlement Connectors for Digital Bonds", not an implementation of the paper.
+
 ## Public deployment
 
 The demo is prepared for a Node.js 20 web service. Each browser receives an
@@ -139,8 +161,13 @@ scripts/lib/erc7573.js            Key documents, encryption and the stateless de
 scripts/lib/crosschain-scenario.js Two-ledger protocol used by the terminal demo and dashboard
 scripts/crosschain-demo.js        Terminal walkthrough of three cross-chain scenarios
 test/CrossChainDvP.test.js        Cross-chain success, failure, cancellation and attack tests
+contracts/CouponDischarge.sol     Coupon claims discharged only by an accepted success preimage
+scripts/lib/coupon-scenario.js    Two-ledger coupon protocol used by the terminal demo and dashboard
+scripts/coupon-demo.js            Terminal walkthrough: paid coupon, and failure followed by a retry
+test/CouponDischarge.test.js      Record date, discharge, retry, idempotent forwarding, forgery tests
 docs/learn/01-dvp.md              Study notes: DvP from business problem to code (Chinese)
 docs/learn/03-crosschain-dvp.md   Study notes: cross-chain DvP and ERC-7573 (Chinese)
+docs/learn/04-coupon-discharge.md Study notes: payment versus discharge and the 2026 pilot (Chinese)
 scripts/deploy.js                 Local deployment example
 scripts/demo-server.js            Local ledger and dashboard API
 public/                            Interactive browser dashboard

@@ -183,7 +183,7 @@ document.querySelectorAll("[data-open-tab]").forEach((button) => {
 });
 
 const requestedView = new URLSearchParams(window.location.search).get("view");
-if (["overview", "demo", "crosschain", "requirements", "assurance"].includes(requestedView)) {
+if (["overview", "demo", "crosschain", "coupon", "requirements", "assurance"].includes(requestedView)) {
   activateTab(requestedView);
 }
 
@@ -241,14 +241,25 @@ function renderKey(title, key, releasedKey) {
     </div>`;
 }
 
-function renderCross(state) {
-  $("cross-steps").innerHTML = state.steps.map((step, index) => `
+function renderSteps(target, steps) {
+  $(target).innerHTML = steps.map((step, index) => `
     <div class="cross-step ${step.done ? "done" : step.next ? "next" : "pending"}">
       <span class="dot">${step.done ? "✓" : index + 1}</span>
       <strong>${escapeHtml(step.title)}</strong>
       <span class="chain-tag ${step.chain === "off-chain" ? "" : step.chain}">${chainLabel[step.chain]}</span>
     </div>`).join("");
+}
 
+function renderLog(target, log) {
+  $(target).innerHTML = log.map((item) => `
+    <div class="activity-item">
+      <p>${item.chain ? `<span class="chain-tag ${item.chain}">${chainLabel[item.chain]}</span> ` : ""}${escapeHtml(item.message)}</p>
+      <time>${new Date(item.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time>
+    </div>`).join("");
+}
+
+function renderCross(state) {
+  renderSteps("cross-steps", state.steps);
   const next = state.steps.find((step) => step.next);
   let actions = "";
   if (!next) {
@@ -280,27 +291,23 @@ function renderCross(state) {
       + renderKey("Alice's reclaim key (failure)", state.keys.seller, state.released && state.released.key)
     : '<div class="empty-state">Keys appear after step 1.</div>';
 
-  $("cross-log").innerHTML = state.log.map((item) => `
-    <div class="activity-item">
-      <p>${item.chain ? `<span class="chain-tag ${item.chain}">${chainLabel[item.chain]}</span> ` : ""}${escapeHtml(item.message)}</p>
-      <time>${new Date(item.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time>
-    </div>`).join("");
+  renderLog("cross-log", state.log);
 }
 
-async function crossRequest(action, params = {}) {
+async function scenarioRequest(name, render, action, params = {}) {
   if (busy) return;
   busy = true;
   document.querySelectorAll("button").forEach((button) => { button.disabled = true; });
   try {
-    const response = await fetch("/api/cross/action", {
+    const response = await fetch(`/api/${name}/action`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action, params }),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Step failed.");
-    renderCross(result.state);
-    toast(action === "reset" ? "Two fresh ledgers started with the new terms." : "Step completed.");
+    render(result.state);
+    toast(action === "reset" ? "Two fresh ledgers started." : "Step completed.");
   } catch (error) {
     toast(friendlyError(error.message), true);
   } finally {
@@ -311,10 +318,10 @@ async function crossRequest(action, params = {}) {
 
 $("cross-actions").addEventListener("click", (event) => {
   const button = event.target.closest("[data-cross-step]");
-  if (button) crossRequest(button.dataset.crossStep, { option: button.dataset.option });
+  if (button) scenarioRequest("cross", renderCross, button.dataset.crossStep, { option: button.dataset.option });
 });
 
-$("cross-reset").addEventListener("click", () => crossRequest("reset", {
+$("cross-reset").addEventListener("click", () => scenarioRequest("cross", renderCross, "reset", {
   units: $("cross-units").value,
   priceEur: $("cross-price").value,
 }));
@@ -323,5 +330,57 @@ $("cross-reset").addEventListener("click", () => crossRequest("reset", {
 function loadCross() {
   return fetch("/api/cross/state")
     .then((response) => response.json())
-    .then(renderCross);
+    .then(renderCross)
+    .then(() => fetch("/api/coupon/state"))
+    .then((response) => response.json())
+    .then(renderCoupon);
 }
+
+// ---- Coupon: payment versus discharge ----
+
+function renderCoupon(state) {
+  renderSteps("coupon-steps", state.steps);
+  const next = state.steps.find((step) => step.next);
+  const button = (action, label, style = "", option = "") =>
+    `<button class="button ${style}" data-coupon-step="${action}"${option ? ` data-option="${option}"` : ""}>${escapeHtml(label)}</button>`;
+  let actions = "";
+  if (next && next.id === "execute") {
+    actions = button("execute", "Issuer pays the coupon", "", "pay") + button("execute", "Payment fails (cash not authorised)", "button-outline", "fail");
+  } else if (next) {
+    actions = button(next.id, `Run step: ${next.title}`);
+  } else {
+    actions = state.canRetry
+      ? `<p class="cross-result bad">Attempt closed by the failure key. The claim is still outstanding.</p>${button("retry", "Open a new attempt")}`
+      : '<p class="cross-result ok">Coupon discharged: the bond itself accepted proof of payment.</p>';
+    if (state.canReforward) actions += button("reforward", "Forward the same key again", "button-outline");
+  }
+  $("coupon-actions").innerHTML = actions;
+
+  const claim = $("coupon-claim");
+  claim.textContent = state.bond.claimStatus;
+  claim.className = `claim-status ${state.bond.claimStatus.toLowerCase()}`;
+  const history = state.bond.history.map((item) => `#${item.attemptId} ${item.outcome}`).join(", ") || "none yet";
+  $("coupon-bond").innerHTML = `
+    <div><span>Claim (period 1)</span><strong>€${escapeHtml(state.bond.claimEur)}</strong></div>
+    <div><span>Current attempt</span><strong>${state.bond.attemptId ? `#${state.bond.attemptId} · ${escapeHtml(state.bond.attemptStatus)}` : "—"}</strong></div>
+    <div><span>Frozen success hash</span><strong>${state.bond.hashSuccess ? escapeHtml(shortHex(state.bond.hashSuccess)) : "—"}</strong></div>
+    <div><span>Closed attempts</span><strong>${escapeHtml(history)}</strong></div>`;
+  $("coupon-payment").innerHTML = `
+    <div><span>Payment status</span><strong>${escapeHtml(state.payment.status)}</strong></div>
+    <div><span>Alice received</span><strong>€${escapeHtml(state.payment.aliceEur)}</strong></div>
+    <div><span>Issuer cash</span><strong>€${escapeHtml(state.payment.issuerEur)}</strong></div>`;
+  $("coupon-key").innerHTML = state.released
+    ? `<div class="key-card${state.released.success ? " released" : ""}">
+        <strong>${state.released.success ? "Success key" : "Failure key"}${state.released.forwardCount ? ` · forwarded ${state.released.forwardCount}×` : ""}</strong>
+        <dl><dt>Plaintext</dt><dd>${escapeHtml(state.released.key)}</dd></dl>
+      </div>`
+    : '<div class="empty-state">No key released yet.</div>';
+  renderLog("coupon-log", state.log);
+}
+
+$("coupon-actions").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-coupon-step]");
+  if (button) scenarioRequest("coupon", renderCoupon, button.dataset.couponStep, { option: button.dataset.option });
+});
+
+$("coupon-reset").addEventListener("click", () => scenarioRequest("coupon", renderCoupon, "reset"));

@@ -9,6 +9,9 @@ const errorMessages = {
   BondNotMatured: "Principal funding is only available after the maturity date.",
   RedemptionNotFunded: "The issuer must fund principal before investors can redeem.",
   InvalidAmount: "Enter a valid positive amount.",
+  InvalidTerms: "Enter a buyer, a positive number of units and a positive price.",
+  TermsMismatch: "The buyer's confirmation does not match the proposed terms.",
+  WrongStatus: "This step is not allowed in the trade's current status.",
 };
 
 function formatDate(timestamp) {
@@ -25,6 +28,7 @@ function setText(id, value) { $(id).textContent = value; }
 function renderInvestor(name, data) {
   setText(`${name}-status`, data.whitelisted ? "Whitelisted" : "Not approved");
   setText(`${name}-units`, data.units);
+  setText(`${name}-cash`, `€${trimAmount(data.cash)}`);
   setText(`${name}-coupon`, trimAmount(data.couponReceived));
   setText(`${name}-principal`, trimAmount(data.principalReceived));
   $(`${name}-card`).classList.toggle("approved", data.whitelisted);
@@ -45,11 +49,57 @@ function render(state) {
   renderInvestor("alice", state.accounts.alice);
   renderInvestor("bob", state.accounts.bob);
 
+  renderBlotter(state.trades);
+
   $("activity").innerHTML = state.activity.map((item) => `
     <div class="activity-item">
       <p>${escapeHtml(item.message)}</p>
       <time>${new Date(item.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</time>
     </div>`).join("");
+}
+
+const names = { alice: "Alice", bob: "Bob" };
+
+function tradeActions(trade) {
+  const button = (action, label, style = "button-outline") =>
+    `<button class="button button-small ${style}" data-trade-action="${action}" data-trade-id="${trade.id}">${label}</button>`;
+  if (trade.status === "PROPOSED") {
+    return button("confirmTrade", `${names[trade.buyer]} confirms terms`, "") + button("cancelTrade", "Cancel");
+  }
+  if (trade.status === "CONFIRMED") {
+    return [
+      trade.bondsAuthorised ? "" : button("authoriseBonds", `${names[trade.seller]} authorises bonds`),
+      trade.cashAuthorised ? "" : button("authoriseCash", `${names[trade.buyer]} authorises cash`),
+      button("settleTrade", "Settle (DvP)", ""),
+    ].join("");
+  }
+  return "";
+}
+
+function renderBlotter(trades) {
+  if (!trades.length) {
+    $("blotter").innerHTML = '<div class="empty-state">No trades yet. Propose one in step 03.</div>';
+    return;
+  }
+  $("blotter").innerHTML = trades.map((trade) => {
+    const checks = trade.status === "CONFIRMED" ? `
+      <div class="trade-checks">
+        <span class="${trade.bondsAuthorised ? "ok" : "warn"}">${trade.bondsAuthorised ? "✓" : "○"} Bond leg authorised</span>
+        <span class="${trade.cashAuthorised ? "ok" : "warn"}">${trade.cashAuthorised ? "✓" : "○"} Cash leg authorised</span>
+        <span class="${trade.preCheck ? "warn" : "ok"}">Pre-check: ${escapeHtml(trade.preCheck || "ready to settle")}</span>
+      </div>` : "";
+    const reason = trade.failureReason ? `<p class="trade-reason">Failure recorded: ${escapeHtml(trade.failureReason)}. No bonds or cash moved.</p>` : "";
+    return `
+      <div class="trade">
+        <div class="trade-head">
+          <strong>#${trade.id}</strong>
+          <span>${names[trade.seller] || "?"} → ${names[trade.buyer] || "?"} · ${trade.units} unit${trade.units === 1 ? "" : "s"} · €${trimAmount(trade.cash)}</span>
+          <span class="trade-status ${trade.status.toLowerCase()}">${trade.status}</span>
+        </div>
+        ${checks}${reason}
+        <div class="trade-actions">${tradeActions(trade)}</div>
+      </div>`;
+  }).join("");
 }
 
 function escapeHtml(text) {
@@ -102,6 +152,11 @@ async function perform(action, params = {}) {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error || "Transaction failed.");
     render(result.state);
+    const failed = action === "settleTrade" && result.state.trades.find((trade) => String(trade.id) === String(params.id) && trade.status === "FAILED");
+    if (failed) {
+      toast(`Settlement failed and was recorded: ${failed.failureReason}.`, true);
+      return;
+    }
     const confirmations = {
       reset: "The current bond has been reset with the same terms.",
       configure: "New terms deployed. A fresh Solidity bond is now live.",
@@ -146,11 +201,17 @@ $("configure-button").addEventListener("click", () => perform("configure", {
   maturityYears: $("config-maturity").value,
 }));
 
-$("transfer-button").addEventListener("click", () => perform("transfer", {
-  from: $("transfer-from").value,
-  to: $("transfer-to").value,
-  units: $("transfer-units").value,
+$("propose-button").addEventListener("click", () => perform("proposeTrade", {
+  seller: $("trade-seller").value,
+  buyer: $("trade-buyer").value,
+  units: $("trade-units").value,
+  price: $("trade-price").value,
 }));
+
+$("blotter").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-trade-action]");
+  if (button) perform(button.dataset.tradeAction, { id: button.dataset.tradeId });
+});
 
 if (window.location.protocol === "file:") {
   setText("phase", "PREVIEW");

@@ -26,6 +26,7 @@ contract TokenizedBond {
 
     mapping(address => bool) public isWhitelisted;
     mapping(address => uint256) public balanceOf;
+    mapping(address => mapping(address => uint256)) public allowance;
 
     address[] private holders;
     mapping(address => bool) private hasBeenHolder;
@@ -33,6 +34,7 @@ contract TokenizedBond {
     event InvestorWhitelisted(address indexed investor, bool approved);
     event BondIssued(address indexed investor, uint256 units);
     event Transfer(address indexed from, address indexed to, uint256 units);
+    event Approval(address indexed owner, address indexed spender, uint256 units);
     event CouponPaid(uint256 indexed couponNumber, uint256 paymentDate, uint256 totalAmount);
     event RedemptionFunded(uint256 totalAmount);
     event Redeemed(address indexed investor, uint256 units, uint256 principalAmount);
@@ -43,6 +45,7 @@ contract TokenizedBond {
     error IssuanceClosed();
     error InvalidAmount();
     error InsufficientBalance();
+    error InsufficientAllowance();
     error CouponNotDue();
     error IncorrectPayment(uint256 expected, uint256 received);
     error BondNotMatured();
@@ -104,18 +107,38 @@ contract TokenizedBond {
      * @dev The holder register is intentionally simple for demonstration.
      */
     function transfer(address to, uint256 units) external returns (bool) {
-        if (!isWhitelisted[msg.sender] || !isWhitelisted[to]) {
+        _transfer(msg.sender, to, units);
+        return true;
+    }
+
+    /// @notice Authorises `spender` (e.g. the DvP contract) to move up to `units`.
+    function approve(address spender, uint256 units) external returns (bool) {
+        allowance[msg.sender][spender] = units;
+        emit Approval(msg.sender, spender, units);
+        return true;
+    }
+
+    /// @notice Moves units on behalf of `from`; the whitelist still applies.
+    function transferFrom(address from, address to, uint256 units) external returns (bool) {
+        uint256 allowed = allowance[from][msg.sender];
+        if (allowed < units) revert InsufficientAllowance();
+        allowance[from][msg.sender] = allowed - units;
+        _transfer(from, to, units);
+        return true;
+    }
+
+    function _transfer(address from, address to, uint256 units) private {
+        if (!isWhitelisted[from] || !isWhitelisted[to]) {
             revert InvestorNotWhitelisted();
         }
         if (to == address(0) || units == 0) revert InvalidAmount();
-        if (balanceOf[msg.sender] < units) revert InsufficientBalance();
+        if (balanceOf[from] < units) revert InsufficientBalance();
 
         _registerHolder(to);
-        balanceOf[msg.sender] -= units;
+        balanceOf[from] -= units;
         balanceOf[to] += units;
 
-        emit Transfer(msg.sender, to, units);
-        return true;
+        emit Transfer(from, to, units);
     }
 
     function couponPerUnit() public view returns (uint256) {

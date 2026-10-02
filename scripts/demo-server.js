@@ -11,6 +11,8 @@ process.env.TMPDIR = runtimeTemp;
 const ganache = require("ganache");
 const { ethers } = require("ethers");
 const bondArtifact = require("../artifacts/contracts/TokenizedBond.sol/TokenizedBond.json");
+const cashArtifact = require("../artifacts/contracts/TokenisedEuro.sol/TokenisedEuro.json");
+const dvpArtifact = require("../artifacts/contracts/DvPSettlement.sol/DvPSettlement.json");
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -19,6 +21,17 @@ const DAY = 24 * 60 * 60;
 const SESSION_TTL = Number(process.env.SESSION_MINUTES || 30) * 60 * 1000;
 const MAX_SESSIONS = Number(process.env.MAX_SESSIONS || 12);
 const sessions = new Map();
+const INITIAL_CASH_EUR = 5_000;
+const TRADE_STATUS = ["NONE", "PROPOSED", "CONFIRMED", "SETTLED", "FAILED", "CANCELLED"];
+const FAILURE_REASON = [
+  null,
+  "Seller not whitelisted",
+  "Buyer not whitelisted",
+  "Seller has insufficient bonds",
+  "Seller has not authorised the bonds",
+  "Buyer has insufficient cash",
+  "Buyer has not authorised the cash",
+];
 
 const DEFAULT_CONFIG = Object.freeze({
   name: "Demo Digital Bond 2027",
@@ -52,6 +65,30 @@ function addActivity(context, kind, message, txHash = null) {
   context.activity = context.activity.slice(0, 40);
 }
 
+function toCents(eur) {
+  return BigInt(Math.round(Number(eur) * 100));
+}
+
+function formatEur(cents) {
+  return ethers.formatUnits(cents, 2);
+}
+
+function eurText(cents) {
+  return Number(formatEur(cents)).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function tradeById(context, id) {
+  const tradeId = Number(id);
+  if (!Number.isInteger(tradeId) || tradeId <= 0) throw new Error("Unknown trade.");
+  const trade = await context.dvp.trades(tradeId);
+  if (trade.status === 0n) throw new Error("Unknown trade.");
+  return { tradeId, trade };
+}
+
+function actorByAddress(context, address) {
+  return Object.entries(context.actors).find(([, value]) => value.address === address);
+}
+
 function actor(context, name) {
   const selected = context.actors[name];
   if (!selected) throw new Error(`Unknown participant: ${name}`);
@@ -71,18 +108,21 @@ async function initializeLedger(context, config) {
   context.payments = { alice: { coupon: 0n, principal: 0n }, bob: { coupon: 0n, principal: 0n } };
   context.rawProvider = ganache.provider({
     logging: { quiet: true },
-    wallet: { totalAccounts: 3, defaultBalance: 10_000 },
+    wallet: { totalAccounts: 4, defaultBalance: 10_000 },
     chain: { chainId: 1337, hardfork: "shanghai" },
     miner: { blockGasLimit: 30_000_000 },
   });
-  context.provider = new ethers.BrowserProvider(context.rawProvider);
-  const signers = await Promise.all([0, 1, 2].map((index) => context.provider.getSigner(index)));
+  // cacheTimeout -1: never reuse a cached (e.g. failed) gas estimate after state changes.
+  context.provider = new ethers.BrowserProvider(context.rawProvider, undefined, { cacheTimeout: -1 });
+  const signers = await Promise.all([0, 1, 2, 3].map((index) => context.provider.getSigner(index)));
   context.actors = {
     issuer: { label: "Issuer Treasury", signer: signers[0] },
     alice: { label: "Investor Alice", signer: signers[1] },
     bob: { label: "Investor Bob", signer: signers[2] },
+    cashBank: { label: "Settlement bank", signer: signers[3] },
   };
 
+  for (const value of Object.values(context.actors)) value.address = await value.signer.getAddress();
   const latest = await context.provider.getBlock("latest");
   const maturityDate = latest.timestamp + (config.maturityYears * 365 + 1) * DAY;
   const factory = new ethers.ContractFactory(bondArtifact.abi, bondArtifact.bytecode, signers[0]);
@@ -95,7 +135,20 @@ async function initializeLedger(context, config) {
     maturityDate
   );
   await context.bond.waitForDeployment();
+
+  const cashFactory = new ethers.ContractFactory(cashArtifact.abi, cashArtifact.bytecode, signers[3]);
+  context.cash = await cashFactory.deploy();
+  await context.cash.waitForDeployment();
+  const dvpFactory = new ethers.ContractFactory(dvpArtifact.abi, dvpArtifact.bytecode, signers[0]);
+  context.dvp = await dvpFactory.deploy(await context.bond.getAddress(), await context.cash.getAddress());
+  await context.dvp.waitForDeployment();
+  for (const name of ["alice", "bob"]) {
+    const tx = await context.cash.mint(await context.actors[name].signer.getAddress(), toCents(INITIAL_CASH_EUR));
+    await tx.wait();
+  }
+
   addActivity(context, "system", `${config.name} (${config.symbol}) was deployed on this private demo ledger.`);
+  addActivity(context, "system", `The settlement bank credited EUR ${INITIAL_CASH_EUR.toLocaleString("en-GB")} in tokenised euro to Alice and Bob.`);
 }
 
 async function createSession() {
@@ -150,6 +203,7 @@ async function state(context) {
       address: await selected.signer.getAddress(),
       whitelisted: await bond.isWhitelisted(await selected.signer.getAddress()),
       units: Number(await bond.balanceOf(await selected.signer.getAddress())),
+      cash: formatEur(await context.cash.balanceOf(await selected.signer.getAddress())),
       couponReceived: ethers.formatEther(context.payments[name].coupon),
       principalReceived: ethers.formatEther(context.payments[name].principal),
     };
@@ -161,8 +215,33 @@ async function state(context) {
   else if (totalSupply > 0n) phase = "ACTIVE";
   if (redemptionFunded && totalSupply === 0n) phase = "CLOSED";
 
+  const trades = [];
+  const tradeCount = Number(await context.dvp.tradeCount());
+  for (let id = tradeCount; id >= 1 && trades.length < 12; id -= 1) {
+    const trade = await context.dvp.trades(id);
+    const status = TRADE_STATUS[Number(trade.status)];
+    const seller = actorByAddress(context, trade.seller);
+    const buyer = actorByAddress(context, trade.buyer);
+    const check = status === "CONFIRMED" ? FAILURE_REASON[Number(await context.dvp.checkSettlement(id))] : null;
+    trades.push({
+      id,
+      seller: seller ? seller[0] : trade.seller,
+      buyer: buyer ? buyer[0] : trade.buyer,
+      units: Number(trade.units),
+      cash: formatEur(trade.cashAmount),
+      status,
+      failureReason: FAILURE_REASON[Number(trade.failureReason)],
+      bondsAuthorised: (await bond.allowance(trade.seller, await context.dvp.getAddress())) >= trade.units,
+      cashAuthorised: (await context.cash.allowance(trade.buyer, await context.dvp.getAddress())) >= trade.cashAmount,
+      preCheck: check,
+    });
+  }
+
   return {
     contractAddress: await bond.getAddress(),
+    dvpAddress: await context.dvp.getAddress(),
+    cashAddress: await context.cash.getAddress(),
+    trades,
     phase,
     blockTime: block.timestamp,
     terms: {
@@ -229,6 +308,65 @@ async function transact(context, action, params = {}) {
       addActivity(context, "transfer", `${from.label} transferred ${units} unit${units === 1 ? "" : "s"} to ${to.label}.`, tx.hash);
       return;
     }
+    case "proposeTrade": {
+      const seller = actor(context, params.seller);
+      const buyer = actor(context, params.buyer);
+      const units = Number(params.units);
+      const price = Number(params.price);
+      if (seller === buyer) throw new Error("Choose two different investors.");
+      if (!Number.isInteger(units) || units <= 0 || units > 1000) throw new Error("Units must be an integer between 1 and 1,000.");
+      if (!Number.isFinite(price) || price <= 0 || price > 1_000_000) throw new Error("Price must be between EUR 0.01 and EUR 1,000,000.");
+      tx = await context.dvp.connect(seller.signer).proposeTrade(buyer.address, units, toCents(price));
+      await tx.wait();
+      const id = Number(await context.dvp.tradeCount());
+      addActivity(context, "trade", `Trade #${id}: ${seller.label} proposed to sell ${units} unit${units === 1 ? "" : "s"} to ${buyer.label} for EUR ${price.toLocaleString("en-GB")}.`, tx.hash);
+      return;
+    }
+    case "confirmTrade": {
+      const { tradeId, trade } = await tradeById(context, params.id);
+      const [, buyer] = actorByAddress(context, trade.buyer);
+      tx = await context.dvp.connect(buyer.signer).confirmTrade(tradeId, trade.units, trade.cashAmount);
+      await tx.wait();
+      addActivity(context, "trade", `Trade #${tradeId}: ${buyer.label} confirmed the same terms.`, tx.hash);
+      return;
+    }
+    case "authoriseBonds": {
+      const { tradeId, trade } = await tradeById(context, params.id);
+      const [, seller] = actorByAddress(context, trade.seller);
+      tx = await bond.connect(seller.signer).approve(await context.dvp.getAddress(), trade.units);
+      await tx.wait();
+      addActivity(context, "trade", `Trade #${tradeId}: ${seller.label} authorised the DvP contract to deliver ${trade.units} unit(s).`, tx.hash);
+      return;
+    }
+    case "authoriseCash": {
+      const { tradeId, trade } = await tradeById(context, params.id);
+      const [, buyer] = actorByAddress(context, trade.buyer);
+      tx = await context.cash.connect(buyer.signer).approve(await context.dvp.getAddress(), trade.cashAmount);
+      await tx.wait();
+      addActivity(context, "trade", `Trade #${tradeId}: ${buyer.label} authorised the DvP contract to pay EUR ${eurText(trade.cashAmount)}.`, tx.hash);
+      return;
+    }
+    case "settleTrade": {
+      const { tradeId, trade } = await tradeById(context, params.id);
+      const [, seller] = actorByAddress(context, trade.seller);
+      tx = await context.dvp.connect(seller.signer).settle(tradeId);
+      await tx.wait();
+      const after = await context.dvp.trades(tradeId);
+      if (after.status === 3n) {
+        addActivity(context, "settlement", `Trade #${tradeId} settled atomically: ${trade.units} unit(s) against EUR ${eurText(trade.cashAmount)}.`, tx.hash);
+      } else {
+        addActivity(context, "failure", `Trade #${tradeId} failed and was recorded: ${FAILURE_REASON[Number(after.failureReason)]}. No bonds or cash moved.`, tx.hash);
+      }
+      return;
+    }
+    case "cancelTrade": {
+      const { tradeId, trade } = await tradeById(context, params.id);
+      const [, seller] = actorByAddress(context, trade.seller);
+      tx = await context.dvp.connect(seller.signer).cancelTrade(tradeId);
+      await tx.wait();
+      addActivity(context, "trade", `Trade #${tradeId} was cancelled before confirmation.`, tx.hash);
+      return;
+    }
     case "advanceCoupon": {
       const current = await state(context);
       if (current.terms.nextCouponDate >= current.terms.maturityDate) throw new Error("No coupon date remains before maturity.");
@@ -279,6 +417,23 @@ async function transact(context, action, params = {}) {
     default:
       throw new Error(`Unsupported action: ${action}`);
   }
+}
+
+const contractInterfaces = [bondArtifact, cashArtifact, dvpArtifact].map((artifact) => new ethers.Interface(artifact.abi));
+
+// Ganache nests revert data where ethers does not look, so decode custom errors here.
+function revertReason(error) {
+  const data = error?.data || error?.info?.error?.data?.result;
+  if (typeof data !== "string" || data.length < 10) return null;
+  for (const contractInterface of contractInterfaces) {
+    try {
+      const parsed = contractInterface.parseError(data);
+      if (parsed) return parsed.name;
+    } catch {
+      // Not an error of this contract; try the next one.
+    }
+  }
+  return null;
 }
 
 function securityHeaders(extra = {}) {
@@ -348,7 +503,7 @@ async function handleRequest(request, response) {
     if (request.method === "GET") return serveFile(requestUrl.pathname, response);
     sendJson(response, 404, { error: "Not found" });
   } catch (error) {
-    const message = error.shortMessage || error.reason || error.message || "Transaction failed.";
+    const message = revertReason(error) || error.shortMessage || error.reason || error.message || "Transaction failed.";
     sendJson(response, 400, { error: message.replace(/^VM Exception while processing transaction: /, "") });
   }
 }

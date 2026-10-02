@@ -83,7 +83,7 @@
 
       <section class="view" data-view="demo">
         <div class="demo-toolbar">
-          <div><p class="overline">LIVE CONTRACT</p><h2>Transaction workbench</h2><p>Recommended path: approve → issue → transfer → coupon → redeem.</p></div>
+          <div><p class="overline">LIVE CONTRACT</p><h2>Transaction workbench</h2><p>Recommended path: approve → issue → DvP trade → coupon → redeem.</p></div>
           <button class="button button-outline" data-action="reset">Reset simulation</button>
         </div>
         <section class="instrument-builder">
@@ -106,18 +106,23 @@
             <div class="lifecycle">
               <article class="stage"><div class="stage-index">01</div><div class="stage-copy"><div class="stage-tag">COMPLIANCE</div><h3>Approve eligible investors</h3><p>Write the result of an assumed off-chain KYC check to the allowlist.</p></div><div class="stage-actions two-buttons"><button class="button button-outline" data-action="whitelist" data-investor="alice">Approve Alice</button><button class="button button-outline" data-action="whitelist" data-investor="bob">Approve Bob</button></div></article>
               <article class="stage"><div class="stage-index">02</div><div class="stage-copy"><div class="stage-tag">PRIMARY MARKET</div><h3>Allocate bond units</h3><p>Issue new units directly to an approved investor.</p></div><div class="stage-actions inline-form"><select id="issue-investor" aria-label="Investor receiving issuance"><option value="alice">Alice</option><option value="bob">Bob</option></select><input id="issue-units" type="number" value="10" min="1" max="1000" aria-label="Units to issue" /><button class="button" id="issue-button">Issue</button></div></article>
-              <article class="stage"><div class="stage-index">03</div><div class="stage-copy"><div class="stage-tag">SECONDARY MARKET</div><h3>Settle a transfer</h3><p>Move ownership between two whitelisted addresses.</p></div><div class="stage-actions transfer-form"><select id="transfer-from" aria-label="Transfer from"><option value="alice">Alice</option><option value="bob">Bob</option></select><span class="direction">→</span><select id="transfer-to" aria-label="Transfer to"><option value="bob">Bob</option><option value="alice">Alice</option></select><input id="transfer-units" type="number" value="4" min="1" aria-label="Units to transfer" /><button class="button" id="transfer-button">Transfer</button></div></article>
+              <article class="stage"><div class="stage-index">03</div><div class="stage-copy"><div class="stage-tag">SECONDARY MARKET · DVP</div><h3>Propose a delivery-versus-payment trade</h3><p>The seller proposes units and a total price in tokenised euro. The buyer confirms, both authorise their leg, then both legs settle in one transaction.</p></div><div class="stage-actions transfer-form"><select id="trade-seller" aria-label="Seller"><option value="alice">Alice</option><option value="bob">Bob</option></select><span class="direction">→</span><select id="trade-buyer" aria-label="Buyer"><option value="bob">Bob</option><option value="alice">Alice</option></select><input id="trade-units" type="number" value="4" min="1" aria-label="Units to sell" /><div class="input-suffix"><input id="trade-price" type="number" value="400" min="0.01" step="0.01" aria-label="Total price in EUR" /><b>EUR</b></div><button class="button" id="propose-button">Propose</button></div></article>
               <article class="stage"><div class="stage-index">04</div><div class="stage-copy"><div class="stage-tag">ASSET SERVICING</div><h3>Distribute the coupon</h3><p>Advance the clock, calculate entitlements and pay current holders.</p></div><div class="stage-actions two-buttons"><button class="button button-outline" data-action="advanceCoupon">Move to date</button><button class="button" data-action="payCoupon">Pay coupon</button></div></article>
               <article class="stage"><div class="stage-index">05</div><div class="stage-copy"><div class="stage-tag">MATURITY</div><h3>Redeem principal</h3><p>Fund repayment, return principal and burn outstanding units.</p></div><div class="stage-actions maturity-actions"><button class="button button-outline" data-action="advanceMaturity">Move to maturity</button><button class="button" data-action="fundRedemption">Fund principal</button><button class="button button-soft" data-action="redeem" data-investor="alice">Redeem Alice</button><button class="button button-soft" data-action="redeem" data-investor="bob">Redeem Bob</button></div></article>
             </div>
+            <section class="panel blotter-panel">
+              <div class="panel-title"><div><p class="overline">OPERATIONS VIEW</p><h2>Settlement blotter</h2></div></div>
+              <p class="panel-note">Every attempt is recorded, including failed settlements and their reason. Try a price above the buyer's EUR balance to see a recorded failure.</p>
+              <div id="blotter" class="blotter"><div class="empty-state">No trades yet. Propose one in step 03.</div></div>
+            </section>
           </div>
 
           <aside class="side-column">
             <section class="panel register-panel">
               <div class="panel-title"><div><p class="overline">HOLDER REGISTER</p><h2>Investors</h2></div><span class="live-label"><i></i>Live</span></div>
-              <div class="holder" id="alice-card"><div class="holder-identity"><span class="avatar">A</span><div><strong>Alice</strong><small id="alice-status">Not approved</small></div></div><div class="position"><strong id="alice-units">0</strong><span>units held</span></div><div class="cashflows"><div><span>Coupons received</span><strong id="alice-coupon">0</strong></div><div><span>Principal received</span><strong id="alice-principal">0</strong></div></div></div>
-              <div class="holder" id="bob-card"><div class="holder-identity"><span class="avatar">B</span><div><strong>Bob</strong><small id="bob-status">Not approved</small></div></div><div class="position"><strong id="bob-units">0</strong><span>units held</span></div><div class="cashflows"><div><span>Coupons received</span><strong id="bob-coupon">0</strong></div><div><span>Principal received</span><strong id="bob-principal">0</strong></div></div></div>
-              <p class="panel-note">Cashflows use local test currency only.</p>
+              <div class="holder" id="alice-card"><div class="holder-identity"><span class="avatar">A</span><div><strong>Alice</strong><small id="alice-status">Not approved</small></div></div><div class="position"><strong id="alice-units">0</strong><span>units held</span></div><div class="cashflows"><div><span>Tokenised EUR</span><strong id="alice-cash">0</strong></div><div><span>Coupons received</span><strong id="alice-coupon">0</strong></div><div><span>Principal received</span><strong id="alice-principal">0</strong></div></div></div>
+              <div class="holder" id="bob-card"><div class="holder-identity"><span class="avatar">B</span><div><strong>Bob</strong><small id="bob-status">Not approved</small></div></div><div class="position"><strong id="bob-units">0</strong><span>units held</span></div><div class="cashflows"><div><span>Tokenised EUR</span><strong id="bob-cash">0</strong></div><div><span>Coupons received</span><strong id="bob-coupon">0</strong></div><div><span>Principal received</span><strong id="bob-principal">0</strong></div></div></div>
+              <p class="panel-note">Trades settle in demo tokenised euro. Coupons and principal still use local test currency.</p>
             </section>
             <section class="panel activity-panel"><div class="panel-title"><div><p class="overline">IMMUTABLE LOG</p><h2>Recent activity</h2></div></div><div id="activity" class="activity-list"><div class="empty-state">Start the local demo to view transactions.</div></div></section>
           </aside>
@@ -132,6 +137,9 @@
             <div><strong>Only eligible investors may hold</strong><span>Issuer approves verified addresses</span><code>setWhitelisted()</code><span class="pass">✓ Non-issuer rejected</span></div>
             <div><strong>Issuance is issuer-controlled</strong><span>Approved investor receives defined units</span><code>issue()</code><span class="pass">✓ Balance and supply update</span></div>
             <div><strong>Transfers remain permissioned</strong><span>Holder transfers only to approved party</span><code>transfer()</code><span class="pass">✓ Invalid recipient rejected</span></div>
+            <div><strong>AC1 · Both legs settle together</strong><span>Seller never delivers without being paid</span><code>DvPSettlement.settle()</code><span class="pass">✓ Bonds and cash swap in one transaction</span></div>
+            <div><strong>AC2–AC4 · Failures are recorded</strong><span>Operations sees every failed attempt and why</span><code>checkSettlement()</code><span class="pass">✓ Reason stored, no balance moves</span></div>
+            <div><strong>AC5 · Same terms on both sides</strong><span>Buyer confirms exactly what seller proposed</span><code>confirmTrade()</code><span class="pass">✓ Mismatched terms rejected</span></div>
             <div><strong>Coupon follows instrument terms</strong><span>Current holders receive scheduled cashflow</span><code>payCoupon()</code><span class="pass">✓ Timing and amount checked</span></div>
             <div><strong>Principal is returned once</strong><span>Holder redeems units after maturity</span><code>redeem()</code><span class="pass">✓ Units burned on payment</span></div>
           </div>
@@ -152,10 +160,13 @@
       <section class="view" data-view="assurance">
         <div class="assurance-grid">
           <article class="wide-card tests-card">
-            <div class="card-intro"><p class="overline">AUTOMATED ACCEPTANCE TESTS</p><div class="score-line"><h2>5 scenarios verified</h2><strong>5/5</strong></div><p>The suite covers both successful lifecycle events and controls that must reject invalid actions.</p></div>
+            <div class="card-intro"><p class="overline">AUTOMATED ACCEPTANCE TESTS</p><div class="score-line"><h2>17 scenarios verified</h2><strong>17/17</strong></div><p>The suite covers both successful lifecycle events and controls that must reject invalid actions.</p></div>
             <div class="test-list">
               <div><span>PASS</span><p><strong>Issuer authority</strong>Only the issuer can approve investors and allocate units.</p></div>
               <div><span>PASS</span><p><strong>Transfer restriction</strong>Unapproved recipients cannot receive the security.</p></div>
+              <div><span>PASS</span><p><strong>Atomic DvP</strong>Bonds and tokenised euro change hands in one transaction, never one without the other.</p></div>
+              <div><span>PASS</span><p><strong>Recorded settlement failures</strong>Missing cash, bonds, authorisation or KYC status is stored as a reason; balances stay unchanged.</p></div>
+              <div><span>PASS</span><p><strong>Matching terms</strong>The buyer must confirm exactly the proposed units and price.</p></div>
               <div><span>PASS</span><p><strong>Coupon distribution</strong>Payment follows current holdings at the scheduled date.</p></div>
               <div><span>PASS</span><p><strong>Payment validation</strong>An incorrectly funded coupon is rejected.</p></div>
               <div><span>PASS</span><p><strong>Maturity redemption</strong>Principal is funded, paid and units are burned.</p></div>
@@ -166,7 +177,7 @@
             <div class="card-intro"><p class="overline">PRODUCTION GAP ANALYSIS</p><h2>What a regulated implementation still needs</h2><p>The prototype demonstrates process logic, not production readiness.</p></div>
             <div class="risk-grid">
               <div><span>IDENTITY</span><strong>KYC/AML integration</strong><p>Binding legal identities, onboarding evidence and sanctions controls.</p></div>
-              <div><span>SETTLEMENT</span><strong>Regulated cash leg</strong><p>Tokenized deposit, central-bank money or external payment-versus-delivery.</p></div>
+              <div><span>SETTLEMENT</span><strong>Regulated cash leg</strong><p>The demo tokenised euro has no legal backing; production needs tokenised deposits, central-bank money or a trigger to T2.</p></div>
               <div><span>GOVERNANCE</span><strong>Institutional controls</strong><p>Role separation, multisignature approval, pause and recovery processes.</p></div>
               <div><span>PRIVACY</span><strong>Confidentiality design</strong><p>Protection of positions, investor data and commercially sensitive activity.</p></div>
               <div><span>SCALE</span><strong>Claim-based payments</strong><p>Record-date snapshots and scalable distribution instead of holder loops.</p></div>

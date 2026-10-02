@@ -2,7 +2,7 @@
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/johnhz0229/digitalbonddlt)
 
-This is an educational Solidity prototype made during my spare time showing the lifecycle of a simple fixed-rate digital bond: investor whitelisting, issuance, permissioned transfer, coupon payment, redemption funding and principal repayment.
+This is an educational Solidity prototype made during my spare time showing the lifecycle of a simple fixed-rate digital bond: investor whitelisting, issuance, delivery-versus-payment (DvP) settlement against a tokenised euro, coupon payment, redemption funding and principal repayment.
 
 ## Business scenario
 
@@ -13,6 +13,8 @@ A corporate or bank issuer creates a one-year bond with a fixed face value and a
 - Issuer-controlled investor whitelist
 - Issuance to approved investors
 - Permissioned transfers between approved investors
+- Atomic DvP settlement of bond units against a demo tokenised euro (`DvPSettlement`)
+- Recorded settlement failures with a reason (missing cash, bonds, authorisation or KYC status), so operations sees every attempt
 - Fixed coupon calculation using basis points
 - Scheduled coupon distribution
 - Maturity check and redemption funding
@@ -43,7 +45,8 @@ The dashboard opens automatically at `http://127.0.0.1:3000`. No wallet,
 browser extension, public blockchain or real currency is required. Each button
 executes a real transaction against the Solidity contract on Hardhat's local
 in-memory ledger. Follow the five numbered steps from KYC whitelisting through
-issuance, transfer, coupon payment and maturity redemption. Press `Ctrl+C` in
+issuance, DvP trade, coupon payment and maturity redemption. The settlement
+blotter shows every trade, its pre-check result, and the reason for any failure. Press `Ctrl+C` in
 the terminal when finished.
 
 The four dashboard views support an interview walkthrough:
@@ -99,8 +102,12 @@ face value × annual coupon rate × coupon interval / 365 days
 ## Repository structure
 
 ```text
-contracts/TokenizedBond.sol       Smart contract
-test/TokenizedBond.test.js        Automated acceptance and unit tests
+contracts/TokenizedBond.sol       Permissioned bond contract
+contracts/TokenisedEuro.sol       Demo cash token (stand-in for a tokenised deposit or wholesale CBDC)
+contracts/DvPSettlement.sol       Delivery-versus-payment between bond and cash token
+test/TokenizedBond.test.js        Bond lifecycle tests
+test/DvPSettlement.test.js        DvP tests, one block per acceptance criterion
+docs/learn/01-dvp.md              Study notes: DvP from business problem to code (Chinese)
 scripts/deploy.js                 Local deployment example
 scripts/demo-server.js            Local ledger and dashboard API
 public/                            Interactive browser dashboard
@@ -116,7 +123,8 @@ Other omitted production requirements include:
 
 - formal role-based access control and multisignature governance;
 - legally binding investor identity and KYC/AML integration;
-- a regulated cash token or external payment-versus-delivery mechanism;
+- a legally backed cash leg (the demo tokenised euro has none) or a trigger to central bank money in T2;
+- cross-ledger DvP when bond and cash live on different ledgers (see ERC-7573);
 - pause, recovery, forced transfer and key-loss processes;
 - day-count conventions, business-day calendars and precise coupon schedules;
 - privacy, data protection and regulatory reporting;

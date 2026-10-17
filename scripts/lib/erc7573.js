@@ -7,24 +7,32 @@ const OAEP = { padding: crypto.constants.RSA_PKCS1_OAEP_PADDING, oaepHash: "sha2
 
 function createOracleKeyPair() {
   return crypto.generateKeyPairSync("rsa", {
-    modulusLength: 2048,
+    // 3072 bits: RSA-OAEP can then encrypt a key document of up to 318 bytes.
+    modulusLength: 3072,
     publicKeyEncoding: { type: "spki", format: "pem" },
     privateKeyEncoding: { type: "pkcs8", format: "pem" },
   });
 }
 
 /**
- * A key is a small document naming the contract and transfer it belongs to and
- * the payment outcome it stands for. For DvP the success key is the buyer's
- * claim key and the failure key is the seller's reclaim key. The random nonce
- * makes it unguessable; its keccak256 hash is what the asset chain stores.
+ * A key is a small document naming
+ * - the asset-side contract that will accept it (`contract`) and the transfer `id`,
+ * - the payment terms it may be released for: the payment contract allowed to
+ *   request it, the payee and the amount,
+ * - the payment `outcome` it stands for.
+ * For DvP the success key is the buyer's claim key and the failure key is the
+ * seller's reclaim key. The random nonce makes it unguessable; its keccak256
+ * hash is what the asset chain stores.
  */
-function createKeyDocument({ contract, id, outcome }) {
+function createKeyDocument({ contract, id, outcome, paymentContract, payee, amount }) {
   if (!["success", "failure"].includes(outcome)) throw new Error("outcome must be success or failure");
   const document = {
     contract: ethers.getAddress(contract),
     id: String(id),
     outcome,
+    paymentContract: ethers.getAddress(paymentContract),
+    payee: ethers.getAddress(payee),
+    amount: String(amount),
     nonce: crypto.randomBytes(16).toString("hex"),
   };
   return Buffer.from(JSON.stringify(document), "utf8");
@@ -39,12 +47,12 @@ function encryptForOracle(oraclePublicKey, key) {
 }
 
 /**
- * Generates one key (by the counterparty) and returns what may be shared:
- * the hash for the asset chain and the ciphertext for the payment chain.
- * Only the generating party ever sees `plaintext`.
+ * Generates one key and returns what may be shared: the hash for the asset
+ * chain and the ciphertext for the payment chain. Only whoever calls this ever
+ * sees `plaintext`.
  */
-function prepareKey({ oraclePublicKey, contract, id, outcome }) {
-  const plaintext = createKeyDocument({ contract, id, outcome });
+function prepareKey({ oraclePublicKey, ...terms }) {
+  const plaintext = createKeyDocument(terms);
   return {
     plaintext,
     hash: hashKey(plaintext),
@@ -69,16 +77,20 @@ class DecryptionOracle {
    * pilot. Only hashes and ciphertexts leave this function; the plaintexts are
    * discarded, so no participant (and not the oracle's storage) holds a preimage.
    */
-  generateOutcomeKeys({ contract, id }) {
+  generateOutcomeKeys(terms) {
     if (!this.publicKey) throw new Error("Oracle needs its public key to generate keys");
     const make = (outcome) => {
-      const { hash, encrypted } = prepareKey({ oraclePublicKey: this.publicKey, contract, id, outcome });
+      const { hash, encrypted } = prepareKey({ oraclePublicKey: this.publicKey, ...terms, outcome });
       return { hash, encrypted };
     };
     return { success: make("success"), failure: make("failure") };
   }
 
-  decrypt({ id, success, encryptedKey }) {
+  /**
+   * `request` is what the payment contract emitted: which contract asked, for
+   * which transfer, payee and amount, and whether the payment succeeded.
+   */
+  decrypt({ requester, id, payee, amount, success, encryptedKey }) {
     let plaintext;
     try {
       plaintext = crypto.privateDecrypt({ key: this.privateKey, ...OAEP }, Buffer.from(ethers.getBytes(encryptedKey)));
@@ -93,6 +105,10 @@ class DecryptionOracle {
     }
     if (!this.contracts.has(document.contract)) throw new Error("Oracle refused: key is for another contract");
     if (document.id !== String(id)) throw new Error("Oracle refused: key is for another transfer");
+    if (document.paymentContract !== ethers.getAddress(requester)) throw new Error("Oracle refused: requested by a contract the key does not name");
+    if (document.payee !== ethers.getAddress(payee) || document.amount !== String(amount)) {
+      throw new Error("Oracle refused: payment terms differ from the terms in the key");
+    }
     const expected = success ? "success" : "failure";
     if (document.outcome !== expected) throw new Error(`Oracle refused: payment ${success ? "succeeded" : "failed"} but this is the ${document.outcome} key`);
     return plaintext;
@@ -109,11 +125,12 @@ class DecryptionOracle {
         continue;
       }
       if (!parsed || parsed.name !== "TransferKeyRequested") continue;
-      const { id, success, encryptedKey } = parsed.args;
-      const key = this.decrypt({ id, success, encryptedKey });
-      const tx = await paymentContract.releaseKey(id, key);
+      const { id, payee, amount, success, encryptedKey } = parsed.args;
+      // log.address is the contract that really emitted the request.
+      const key = this.decrypt({ requester: log.address, id, payee, amount, success, encryptedKey });
+      const tx = await paymentContract.releaseKey(id, payee, key);
       await tx.wait();
-      released.push({ id, success, key, txHash: tx.hash });
+      released.push({ id, payee, success, key, txHash: tx.hash });
     }
     return released;
   }

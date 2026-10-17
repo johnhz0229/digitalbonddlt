@@ -269,7 +269,7 @@
       <section class="view" data-view="assurance">
         <div class="assurance-grid">
           <article class="wide-card tests-card">
-            <div class="card-intro"><p class="overline">AUTOMATED ACCEPTANCE TESTS</p><div class="score-line"><h2>37 scenarios verified</h2><strong>37/37</strong></div><p>The suite covers both successful lifecycle events and controls that must reject invalid actions.</p></div>
+            <div class="card-intro"><p class="overline">AUTOMATED ACCEPTANCE TESTS</p><div class="score-line"><h2>41 scenarios verified</h2><strong>41/41</strong></div><p>The suite covers both successful lifecycle events and controls that must reject invalid actions.</p></div>
             <div class="test-list">
               <div><span>PASS</span><p><strong>Issuer authority</strong>Only the issuer can approve investors and allocate units.</p></div>
               <div><span>PASS</span><p><strong>Transfer restriction</strong>Unapproved recipients cannot receive the security.</p></div>
@@ -278,7 +278,7 @@
               <div><span>PASS</span><p><strong>Matching terms</strong>The buyer must confirm exactly the proposed units and price.</p></div>
               <div><span>PASS</span><p><strong>Cross-chain DvP</strong>Paid: the buyer key delivers the bonds. Failed or cancelled: the seller key returns them. Only one key is ever released.</p></div>
               <div><span>PASS</span><p><strong>Payment versus discharge</strong>A paid status alone leaves the coupon outstanding; only the accepted success key discharges it. A failure keeps the claim and allows a retry.</p></div>
-              <div><span>PASS</span><p><strong>Cheating attempts blocked</strong>Forged keys, swapped failure keys, wrong-direction keys and non-oracle releases are rejected.</p></div>
+              <div><span>PASS</span><p><strong>Cheating attempts blocked</strong>Forged keys, swapped failure keys, wrong-direction keys, non-oracle releases and self-payments to obtain a success key are rejected.</p></div>
               <div><span>PASS</span><p><strong>Coupon distribution</strong>Payment follows current holdings at the scheduled date.</p></div>
               <div><span>PASS</span><p><strong>Payment validation</strong>An incorrectly funded coupon is rejected.</p></div>
               <div><span>PASS</span><p><strong>Maturity redemption</strong>Principal is funded, paid and units are burned.</p></div>

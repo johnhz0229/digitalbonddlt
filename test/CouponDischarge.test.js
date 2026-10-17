@@ -48,11 +48,16 @@ describe("CouponDischarge (payment versus discharge)", function () {
     await ctx.coupon.recordCoupon(1);
   }
 
+  // The keys name the payment they may be released for: this amount, to this holder, via this payment contract.
+  async function keyTerms(ctx, id, holder, amount) {
+    return { contract: await ctx.coupon.getAddress(), id, paymentContract: await ctx.payment.getAddress(), payee: holder.address, amount };
+  }
+
   // Bond side: open an attempt; the oracle generates and commits both keys.
   async function openAttempt(ctx, holder) {
     await ctx.coupon.connect(ctx.issuer).openAttempt(1, holder.address);
     const id = await ctx.coupon.attemptCount();
-    const keys = ctx.oracle.generateOutcomeKeys({ contract: await ctx.coupon.getAddress(), id });
+    const keys = ctx.oracle.generateOutcomeKeys(await keyTerms(ctx, id, holder, (await ctx.coupon.attempts(id)).amount));
     await ctx.coupon.connect(ctx.oracleSigner).commitOutcomeKeys(id, keys.success.hash, keys.success.encrypted, keys.failure.hash, keys.failure.encrypted);
     return { id, keys, amount: (await ctx.coupon.attempts(id)).amount };
   }
@@ -63,7 +68,7 @@ describe("CouponDischarge (payment versus discharge)", function () {
     await ctx.payment.connect(ctx.issuer).inceptTransfer(id, amount, holder.address, keys.success.encrypted, keys.failure.encrypted);
     await ctx.payment.connect(holder).confirmTransfer(id, amount, ctx.issuer.address, keys.success.encrypted, keys.failure.encrypted);
     if (fund) await ctx.cash.connect(ctx.issuer).approve(await ctx.payment.getAddress(), amount);
-    const receipt = await (await ctx.payment.connect(ctx.issuer).transferAndDecrypt(id)).wait();
+    const receipt = await (await ctx.payment.connect(ctx.issuer).transferAndDecrypt(id, holder.address)).wait();
     const [released] = await ctx.oracle.handleReceipt(ctx.payment.connect(ctx.oracleSigner), receipt);
     return released;
   }
@@ -73,14 +78,15 @@ describe("CouponDischarge (payment versus discharge)", function () {
     await expect(ctx.coupon.recordCoupon(1)).to.be.revertedWithCustomError(ctx.coupon, "CouponNotDue");
     await recordFirstCoupon(ctx);
 
-    const perUnit = await ctx.coupon.couponPerUnit(); // EUR 1,000 x 5% x 90/365 = EUR 12.32
-    expect(perUnit).to.equal(eur(12.32));
-    expect(await ctx.coupon.entitlement(1, ctx.alice.address)).to.equal(perUnit * 6n);
-    expect(await ctx.coupon.entitlement(1, ctx.bob.address)).to.equal(perUnit * 4n);
+    // EUR 1,000 x 5% x 90/365 = EUR 12.3287 per unit. Rounding once on the position:
+    // 6 units -> EUR 73.97 (rounding per unit first would give 6 x 12.32 = EUR 73.92).
+    expect(await ctx.coupon.couponPerUnit()).to.equal(eur(12.32));
+    expect(await ctx.coupon.entitlement(1, ctx.alice.address)).to.equal(eur(73.97));
+    expect(await ctx.coupon.entitlement(1, ctx.bob.address)).to.equal(eur(49.31));
 
     // A transfer after the record date does not change who is owed this coupon.
     await ctx.bond.connect(ctx.alice).transfer(ctx.bob.address, 6);
-    expect(await ctx.coupon.entitlement(1, ctx.alice.address)).to.equal(perUnit * 6n);
+    expect(await ctx.coupon.entitlement(1, ctx.alice.address)).to.equal(eur(73.97));
   });
 
   it("a successful payment alone does not discharge the claim; the accepted preimage does", async function () {
@@ -145,9 +151,25 @@ describe("CouponDischarge (payment versus discharge)", function () {
       const ctx = await deploy();
       await recordFirstCoupon(ctx);
       const attempt = await openAttempt(ctx, ctx.alice);
-      const guess = createKeyDocument({ contract: await ctx.coupon.getAddress(), id: attempt.id, outcome: "success" });
+      const guess = createKeyDocument({ ...(await keyTerms(ctx, attempt.id, ctx.alice, attempt.amount)), outcome: "success" });
       await expect(ctx.coupon.connect(ctx.issuer).submitOutcome(attempt.id, guess))
         .to.be.revertedWithCustomError(ctx.coupon, "InvalidPreimage");
+    });
+
+    it("the issuer cannot discharge the claim by paying a token amount to himself", async function () {
+      const ctx = await deploy();
+      await recordFirstCoupon(ctx);
+      const attempt = await openAttempt(ctx, ctx.alice);
+      const self = ctx.outsider; // the issuer's own second address
+
+      await ctx.payment.connect(ctx.issuer).inceptTransfer(attempt.id, 1, self.address, attempt.keys.success.encrypted, attempt.keys.failure.encrypted);
+      await ctx.payment.connect(self).confirmTransfer(attempt.id, 1, ctx.issuer.address, attempt.keys.success.encrypted, attempt.keys.failure.encrypted);
+      await ctx.cash.connect(ctx.issuer).approve(await ctx.payment.getAddress(), 1);
+      const receipt = await (await ctx.payment.connect(ctx.issuer).transferAndDecrypt(attempt.id, self.address)).wait();
+
+      await expect(ctx.oracle.handleReceipt(ctx.payment.connect(ctx.oracleSigner), receipt))
+        .to.be.rejectedWith("payment terms differ");
+      expect(await ctx.coupon.isOutstanding(1, ctx.alice.address)).to.equal(true);
     });
 
     it("only the oracle can commit the outcome keys", async function () {
@@ -162,7 +184,7 @@ describe("CouponDischarge (payment versus discharge)", function () {
       const ctx = await deploy();
       await recordFirstCoupon(ctx);
       const attempt = await openAttempt(ctx, ctx.alice);
-      const other = ctx.oracle.generateOutcomeKeys({ contract: await ctx.coupon.getAddress(), id: attempt.id });
+      const other = ctx.oracle.generateOutcomeKeys(await keyTerms(ctx, attempt.id, ctx.alice, attempt.amount));
       await ctx.payment.connect(ctx.issuer).inceptTransfer(attempt.id, attempt.amount, ctx.alice.address, other.success.encrypted, attempt.keys.failure.encrypted);
       await expect(ctx.payment.connect(ctx.alice).confirmTransfer(attempt.id, attempt.amount, ctx.issuer.address, attempt.keys.success.encrypted, attempt.keys.failure.encrypted))
         .to.be.revertedWithCustomError(ctx.payment, "TermsMismatch");

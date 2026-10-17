@@ -44,7 +44,9 @@ contract CouponDischarge {
 
     IBondRegister public immutable bond;
     address public immutable decryptionOracle;
-    uint256 public immutable couponPerUnit; // in cash token units (EUR cents)
+    uint256 public immutable faceValueInCash; // per bond unit, in cash token units (EUR cents)
+    uint256 public immutable annualCouponRateBps;
+    uint256 public immutable couponPerUnit; // display only; claims are rounded once per position
     uint256 public immutable firstCouponDate;
     uint256 public immutable couponInterval;
     uint256 public immutable maturityDate;
@@ -74,13 +76,25 @@ contract CouponDischarge {
     error WrongStatus(AttemptStatus current);
     error InvalidPreimage();
 
-    constructor(address bond_, uint256 faceValueInCash, address decryptionOracle_) {
+    constructor(address bond_, uint256 faceValueInCash_, address decryptionOracle_) {
         bond = IBondRegister(bond_);
         decryptionOracle = decryptionOracle_;
+        faceValueInCash = faceValueInCash_;
+        annualCouponRateBps = bond.annualCouponRateBps();
         couponInterval = bond.couponInterval();
         maturityDate = bond.maturityDate();
         firstCouponDate = bond.nextCouponDate();
-        couponPerUnit = (faceValueInCash * bond.annualCouponRateBps() * couponInterval) / (BASIS_POINTS * YEAR);
+        couponPerUnit = couponFor(1);
+    }
+
+    /**
+     * @notice Coupon for a position of `units`, rounded down once on the whole
+     *         position rather than per unit (6 units: EUR 73.97, not 6 x 12.32).
+     * @dev Simplified day count: interval / 365 days. Real bonds follow the
+     *      convention in their terms, e.g. ACT/ACT (ICMA).
+     */
+    function couponFor(uint256 units) public view returns (uint256) {
+        return (units * faceValueInCash * annualCouponRateBps * couponInterval) / (BASIS_POINTS * YEAR);
     }
 
     function couponDate(uint256 period) public view returns (uint256) {
@@ -100,7 +114,7 @@ contract CouponDischarge {
         uint256 count = bond.holderCount();
         for (uint256 i = 0; i < count; i++) {
             address holder = bond.holderAt(i);
-            uint256 amount = bond.balanceOf(holder) * couponPerUnit;
+            uint256 amount = couponFor(bond.balanceOf(holder));
             if (amount > 0) {
                 entitlement[period][holder] = amount;
                 total += amount;

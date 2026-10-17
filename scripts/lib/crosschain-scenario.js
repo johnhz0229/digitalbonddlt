@@ -126,7 +126,16 @@ class CrossChainScenario {
   }
 
   async step_keys() {
-    const params = { oraclePublicKey: oracleKeys().publicKey, contract: await this.locking.getAddress(), id: this.terms.id };
+    // Both keys name the payment they may be released for: Alice is paid the agreed price
+    // through this payment contract. A payment to anyone else, or of another amount, releases nothing.
+    const params = {
+      oraclePublicKey: oracleKeys().publicKey,
+      contract: await this.locking.getAddress(),
+      id: this.terms.id,
+      paymentContract: await this.paymentContract.getAddress(),
+      payee: this.alice.address,
+      amount: this.terms.amount,
+    };
     // Alice generates the success key that will let BOB claim; Bob generates the failure key that lets ALICE reclaim.
     const buyerKey = prepareKey({ ...params, outcome: "success" });
     const sellerKey = prepareKey({ ...params, outcome: "failure" });
@@ -167,14 +176,14 @@ class CrossChainScenario {
   async step_execute(option = "pay") {
     let tx;
     if (option === "cancel") {
-      tx = await this.paymentContract.connect(this.alice.payment).cancelAndDecrypt(this.terms.id);
+      tx = await this.paymentContract.connect(this.alice.payment).cancelAndDecrypt(this.terms.id, this.alice.address);
       this.note("payment", "cancelAndDecrypt: Alice cancels the unpaid trade. The failure key is requested. No time-lock was needed.", "payment", tx.hash);
     } else {
       await (await this.cash.connect(this.bob.payment).approve(await this.paymentContract.getAddress(), this.terms.amount)).wait();
-      tx = await this.paymentContract.connect(this.bob.payment).transferAndDecrypt(this.terms.id);
+      tx = await this.paymentContract.connect(this.bob.payment).transferAndDecrypt(this.terms.id, this.alice.address);
     }
     this.pendingReceipt = await tx.wait();
-    const payment = await this.paymentContract.payments(this.terms.id);
+    const payment = await this.paymentContract.payments(await this.paymentContract.paymentKey(this.terms.id, this.alice.address));
     this.outcome = Number(payment.status) === 3 ? "paid" : option === "cancel" ? "cancelled" : "failed";
     if (this.outcome === "paid") {
       this.note("payment", `transferAndDecrypt: EUR ${this.terms.priceEur.toLocaleString("en-GB")} moved from Bob to Alice. The success key is requested.`, "payment", tx.hash);

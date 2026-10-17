@@ -78,6 +78,12 @@ ERC-7573:
 4. A stateless oracle decrypts that one key and publishes it. Whoever submits
    it on the asset chain moves the bond in the direction the key encodes.
 
+Each key document also names the payment it may be released for: the payment
+contract, the payee and the amount. The oracle checks them before decrypting,
+so a buyer cannot obtain the success key by "paying" one cent to his own
+second address under the same transfer id. An earlier version of this
+prototype had exactly that hole; the tests now cover it.
+
 Run it on two separate local ledgers in the terminal (success, failed payment
 and cancellation):
 

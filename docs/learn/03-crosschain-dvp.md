@@ -101,11 +101,29 @@ Peter 和 Fries 在 Innovation LAB 博客里指出两个问题(备考手册第 3
 ## 5. 和原版 ERC-7573 的差别(面试要主动说)
 
 - 原版金额是 `int`,还带一个 `transaction` 描述字段;支付合约确认时有回调接口。我简化成 `uint`,去掉了回调。
-- 原版钥匙文档是 XML;我用 JSON:`{contract, id, outcome, nonce}`,其中 `outcome` 是 `success` 或 `failure`。
+- 原版钥匙文档是 XML;我用 JSON:`{contract, id, outcome, paymentContract, payee, amount, nonce}`。因为文档变长,预言机用 RSA-3072 加密。
 - 预言机用 RSA-OAEP 加密,是一个 Node 脚本,不是门限解密。
 - 两条"链"是本地的两个 ganache 账本(链 ID 7001 和 7002),用同一套助记词,所以同一个人在两条链上地址相同。单元测试里两组合约放在同一条链上,但它们从不互相调用,唯一的连接就是钥匙。
 - 锁定之后不能直接取消资产链上的交易,只能走支付链的取消流程拿取回钥匙。
 - **重要局限:收到钥匙的一方无法验证哈希和密文是否对应同一把钥匙。** 如果 Bob 给 Alice 的取回钥匙,哈希和密文不对应,付款失败时券会被永远锁住。DZ BANK / KfW 2026 年 3 月的试点改为**由预言机生成钥匙对**,从根本上避免了这个问题。详见模块 4 笔记第 4 节。
+
+## 5b. 我自己发现并修复的一个漏洞(面试最好讲的故事)
+
+**漏洞**:早期版本里,支付链上的付款记录只按交易编号区分,预言机也只检查"钥匙属于哪个合约、哪个编号、成功还是失败"。于是 Bob 可以抢先用同一个编号登记一笔假付款:**给自己的另一个地址付 1 分钱**,自己确认,自己执行。付款"成功"了,预言机就释放了成功钥匙,Bob 拿走了全部债券。我写了一个测试,攻击确实成功了。
+
+**根本原因**:钥匙没有和**付款条款**绑定。"付款成功"只说明有人付了钱,没说明是**付给了谁、付了多少**。
+
+**修复**(三处):
+1. **钥匙文档写明它能为哪笔付款释放**:指定的支付合约、收款人、金额。预言机只在请求里的条款和钥匙里写的一致时才解密。它仍然是无状态的:需要的信息都在钥匙和请求里,不存任何交易数据。
+2. **付款记录按"编号 + 收款人"区分**,别人无法占用你的编号;收款人可以 `rejectTransfer` 拒绝陌生人登记的付款。
+3. **付款人只有在收款人确认后才能取消**,陌生人无法替别人请求失败钥匙、中止交易。
+
+对应测试:"the buyer cannot get the success key by paying a token amount to his own second address"、"…paying the seller less than agreed"、"a stranger cannot block the transfer id…"。模块 4 也有同样的问题(发行人给自己付 1 分钱来解除 Alice 的债权),用同样的方法修复了。
+
+**面试说法**:
+> "My first version had a hole: the buyer could pay one cent to his own second address under the same transfer id and get the success key. The key wasn't bound to the payment terms. I fixed it by writing payee, amount and the requesting payment contract into the key document, so the oracle checks them before decrypting, and it stays stateless. I'd be curious how the reference implementation binds the key to the payment."
+
+最后一句是真诚的提问:我没有读过 ERC-7573 参考实现的代码,不要假装知道它怎么做。
 
 ## 6. 自测题
 

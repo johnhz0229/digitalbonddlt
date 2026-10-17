@@ -100,7 +100,7 @@ class CouponScenario {
     const tx = await this.coupon.recordCoupon(1);
     await tx.wait();
     const amount = await this.coupon.entitlement(1, this.alice.address);
-    this.note("asset", `recordCoupon(1): coupon date reached. Alice is owed EUR ${eurText(amount)} (6 × EUR ${eurText(await this.coupon.couponPerUnit())}); Bob's claim is fixed the same way.`, "asset", tx.hash);
+    this.note("asset", `recordCoupon(1): coupon date reached. Alice is owed EUR ${eurText(amount)} for 6 units (EUR 1,000 × 5% × 90/365, rounded once on the position); Bob's claim is fixed the same way.`, "asset", tx.hash);
   }
 
   async step_open() {
@@ -112,7 +112,14 @@ class CouponScenario {
   }
 
   async step_commit() {
-    this.keys = this.oracle.generateOutcomeKeys({ contract: await this.coupon.getAddress(), id: this.attemptId });
+    // The keys name the payment they may be released for: this amount, to Alice, via this payment contract.
+    this.keys = this.oracle.generateOutcomeKeys({
+      contract: await this.coupon.getAddress(),
+      id: this.attemptId,
+      paymentContract: await this.paymentContract.getAddress(),
+      payee: this.alice.address,
+      amount: this.amount,
+    });
     const { success, failure } = this.keys;
     const tx = await this.coupon.connect(this.oracleSigner.asset).commitOutcomeKeys(this.attemptId, success.hash, success.encrypted, failure.hash, failure.encrypted);
     await tx.wait();
@@ -137,9 +144,9 @@ class CouponScenario {
     if (option !== "fail") {
       await (await this.cash.connect(this.issuer.payment).approve(await this.paymentContract.getAddress(), this.amount)).wait();
     }
-    const tx = await this.paymentContract.connect(this.issuer.payment).transferAndDecrypt(this.attemptId);
+    const tx = await this.paymentContract.connect(this.issuer.payment).transferAndDecrypt(this.attemptId, this.alice.address);
     this.pendingReceipt = await tx.wait();
-    const status = Number((await this.paymentContract.payments(this.attemptId)).status);
+    const status = Number((await this.paymentContract.payments(await this.paymentContract.paymentKey(this.attemptId, this.alice.address))).status);
     if (status === 3) {
       this.note("payment", `transferAndDecrypt: EUR ${eurText(this.amount)} moved to Alice. On the bond, her claim is STILL OUTSTANDING: a payment status is not a discharge.`, "payment", tx.hash);
     } else {
@@ -184,7 +191,9 @@ class CouponScenario {
 
   async state() {
     const attempt = this.attemptId ? await this.coupon.attempts(this.attemptId) : null;
-    const paymentRecord = this.attemptId ? await this.paymentContract.payments(this.attemptId) : null;
+    const paymentRecord = this.attemptId
+      ? await this.paymentContract.payments(await this.paymentContract.paymentKey(this.attemptId, this.alice.address))
+      : null;
     const recorded = await this.coupon.recorded(1);
     const claim = recorded ? await this.coupon.entitlement(1, this.alice.address) : 0n;
     const outstanding = recorded ? await this.coupon.isOutstanding(1, this.alice.address) : null;

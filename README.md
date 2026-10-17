@@ -174,6 +174,7 @@ test/CouponDischarge.test.js      Record date, discharge, retry, idempotent forw
 docs/learn/01-dvp.md              Study notes: DvP from business problem to code (Chinese)
 docs/learn/03-crosschain-dvp.md   Study notes: cross-chain DvP and ERC-7573 (Chinese)
 docs/learn/04-coupon-discharge.md Study notes: payment versus discharge and the 2026 pilot (Chinese)
+docs/learn/05-interview-defense.md Interview preparation: honest boundaries, likely questions, demo script
 scripts/deploy.js                 Local deployment example
 scripts/demo-server.js            Local ledger and dashboard API
 public/                            Interactive browser dashboard

@@ -4,6 +4,35 @@
 
 This is an educational Solidity prototype made during my spare time showing the lifecycle of a simple fixed-rate digital bond: investor whitelisting, issuance, delivery-versus-payment (DvP) settlement against a tokenised euro, coupon payment, redemption funding and principal repayment.
 
+## Smart Bond Lab (start here)
+
+A small learning re-build of the architecture described in the March 2026
+DZ BANK / KfW *Smart Bond Contract* pilot report (public PDF on kfw.de): one
+bond from Treasury's funding levels to redemption, with no central orchestrator.
+
+- `SmartBondFactory`: Group Treasury publishes indicative funding levels per
+  tenor; an eligible investor requests a trade and gets a dedicated contract instance.
+- `SmartBondContract`: explicit state machine (IndicationPhase → TradeIncepted →
+  DistributionPhase → IsinAssigned → Minted → Issued → Redeemed); terms record and
+  hash confirmed by the investor; issuance, every coupon and the principal use the
+  same settlement pattern.
+- `BondToken`: deployed and minted by the registrar; only the bond contract moves
+  or burns units.
+- `CashLock` on a separate payment ledger models the Bundesbank Trigger Solution:
+  cash is locked irrevocably against an oracle-generated success and failure hash.
+- Event-driven participants (ISIN agent, registrar, stateless decryption oracle,
+  issuer's and investor's own connectors) react to on-chain events with their own keys.
+
+```bash
+npm run lab      # terminal: two separate ledgers, full life cycle incl. a refused cash lock
+npm run demo     # then open http://127.0.0.1:3000/lab for the role-based dashboard
+```
+
+This is not the pilot's code and has no legal effect; see
+`docs/learn/06-smart-bond-lab.md` for the design, the differences from the pilot
+and an analysis of asset-lock versus cash-lock DvP. The sections below describe
+the earlier learning modules that led to it.
+
 ## Business scenario
 
 A corporate or bank issuer creates a one-year bond with a fixed face value and annual coupon. Only investors who have passed an assumed off-chain KYC process may receive or transfer units. Coupon payments follow a fixed schedule. At maturity, the issuer funds principal and investors redeem their units.
@@ -156,6 +185,11 @@ face value × annual coupon rate × coupon interval / 365 days
 ## Repository structure
 
 ```text
+contracts/lab/                    Smart Bond Lab: factory, bond instance, token, cash lock
+scripts/lab/                      Lab participants, human actions, terminal demo
+test/lab/SmartBondLab.test.js     Lab life cycle, state x role, protections
+public/lab.html                   Role-based Lab dashboard
+docs/learn/06-smart-bond-lab.md   Lab design notes and interview walkthrough (Chinese)
 contracts/TokenizedBond.sol       Permissioned bond contract
 contracts/TokenisedEuro.sol       Demo cash token (stand-in for a tokenised deposit or wholesale CBDC)
 contracts/DvPSettlement.sol       Delivery-versus-payment between bond and cash token

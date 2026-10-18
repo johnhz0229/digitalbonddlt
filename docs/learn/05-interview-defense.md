@@ -41,7 +41,7 @@
 
 ### A. 项目本身
 
-**Q1. Walk me through your project.** → 用第 5 节的 3 分钟讲稿。
+**Q1. Walk me through your project.** → 现在优先用 **Smart Bond Lab**(`/lab`)和 `docs/learn/06-smart-bond-lab.md` 第 7 节的讲稿;第 5 节的讲稿作为补充,讲学习过程中的各个模块。
 
 **Q2. Why did you build this?**
 > "To understand the step from tokenisation to programmable instruments. Reading about DvP is easy; deciding what happens when the payment fails forced me to understand it."

@@ -316,3 +316,51 @@ footer p { margin-bottom: 0; }
 .claim-status { margin: -6px 0 14px; padding: 12px 14px; border-radius: 7px; font-size: 15px; font-weight: 800; letter-spacing: .04em; text-align: center; color: var(--muted); background: var(--canvas); }
 .claim-status.outstanding { color: var(--warning); background: #fdf3df; }
 .claim-status.discharged { color: var(--success); background: var(--success-bg); }
+
+/* ---- Smart Bond Lab ---- */
+.hero-value .lab-next { display: block; max-width: 300px; font-size: 15px; line-height: 1.35; color: var(--blue); text-align: right; }
+.lab-states { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 22px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
+.lab-state { padding: 5px 10px; border-radius: 5px; color: var(--muted-light); background: var(--canvas); font-size: 11px; font-weight: 750; letter-spacing: .03em; }
+.lab-state.reached { color: var(--success); background: var(--success-bg); }
+.lab-state.active { color: #fff; background: var(--blue); }
+.lab-arrow { color: var(--line-dark); font-size: 11px; }
+.lab-roles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-bottom: 22px; }
+.lab-role { display: flex; flex-direction: column; gap: 12px; }
+.lab-role .panel-title { margin-bottom: 0; }
+.lab-help { margin: 0; color: var(--muted); font-size: 11px; }
+.lab-cash { color: var(--ink); font-size: 14px; font-weight: 800; white-space: nowrap; }
+.lab-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+.lab-form label { display: flex; flex-direction: column; gap: 4px; color: var(--muted); font-size: 10px; font-weight: 700; }
+.lab-form input, .lab-form select { width: 100%; min-width: 0; }
+.lab-form label { flex: 1 1 80px; }
+.lab-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.lab-toggle { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 11px; }
+.lab-toggle input { width: auto; height: auto; }
+.lab-holding > div { display: flex; justify-content: space-between; padding: 6px 0; border-top: 1px solid var(--line); font-size: 12px; }
+.lab-holding span { color: var(--muted); }
+.lab-participants { display: flex; flex-direction: column; gap: 8px; }
+.lab-participant { padding: 10px 12px; border: 1px solid var(--line); border-radius: 7px; background: #fbfcfd; }
+.lab-participant strong { display: block; font-size: 12px; }
+.lab-participant small { display: block; color: var(--muted-light); font-size: 10px; }
+.lab-participant p { margin: 6px 0 0; color: #334256; font-size: 11px; }
+.lab-clock { padding-top: 6px; border-top: 1px solid var(--line); }
+.lab-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.lab-table th { padding: 6px 8px; color: var(--muted); font-size: 10px; font-weight: 700; letter-spacing: .04em; text-align: left; text-transform: uppercase; border-bottom: 1px solid var(--line); }
+.lab-table td { padding: 8px; border-bottom: 1px solid var(--line); }
+.lab-badge { padding: 2px 7px; border-radius: 4px; color: var(--muted); background: var(--canvas); font-size: 10px; font-weight: 800; letter-spacing: .04em; white-space: nowrap; }
+.lab-badge.ok { color: var(--success); background: var(--success-bg); }
+.lab-badge.bad { color: var(--danger); background: #fbe7e9; }
+.lab-detail .main-column, .lab-detail .side-column, .lab-role { min-width: 0; }
+.lab-detail .main-column { padding: 6px 0; }
+.lab-section { padding: 18px 22px; border-bottom: 1px solid var(--line); }
+.lab-section:last-child { border-bottom: 0; }
+.lab-section .overline { margin-bottom: 10px; }
+.lab-section .lab-table { display: block; overflow-x: auto; }
+.lab-hash { display: block; margin-bottom: 8px; color: var(--muted); font-size: 10px; overflow-wrap: anywhere; }
+.lab-terms { max-height: 340px; margin: 0; padding: 12px; overflow: auto; border-radius: 6px; background: var(--canvas); font-size: 11px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.lab-monitor { max-height: 900px; }
+.lab-event p { color: var(--muted); }
+.lab-event code { color: var(--ink); font-size: 10px; }
+.lab-link { display: inline-block; margin-top: 10px; }
+@media (max-width: 1100px) { .lab-roles { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 720px) { .hero-value .lab-next { text-align: left; max-width: none; } }

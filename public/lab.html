@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Bond Lab</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="wordmark" href="/" aria-label="Back to Treasury Lab">
+        <span class="wordmark-symbol">T</span><span>Treasury<span>/Lab</span></span>
+      </a>
+      <div class="topbar-right">
+        <div class="network"><i></i>Asset ledger 7101 · Payment ledger 7102</div>
+        <span class="prototype-label">EDUCATIONAL PROTOTYPE</span>
+      </div>
+    </header>
+
+    <main class="page-shell">
+      <section class="instrument-header">
+        <div class="instrument-intro">
+          <p class="overline">SMART BOND LAB · PROTOCOL, NOT PLATFORM</p>
+          <div class="title-line">
+            <h1 id="lab-title">Smart Bond Lab</h1>
+            <span class="symbol-pill" id="lab-isin">NO ISIN YET</span>
+            <span class="status-pill" id="lab-state">LOADING</span>
+          </div>
+          <p class="subtitle">A small learning re-build of the architecture described in the March 2026 DZ BANK / KfW Smart Bond Contract pilot report: a factory with funding levels, one contract instance per trade with an explicit state machine, infrastructure participants that react to events, and cash locked on a separate payment ledger. Not the pilot's code.</p>
+          <div class="contract-line"><span>SMART BOND CONTRACT</span><code id="lab-address">No trade requested yet</code></div>
+        </div>
+        <div class="hero-value"><span>NEXT STEP</span><strong class="lab-next" id="lab-next">—</strong></div>
+      </section>
+
+      <section class="lab-states" id="lab-states" aria-label="Life cycle states"></section>
+
+      <section class="lab-roles">
+        <article class="panel lab-role">
+          <div class="panel-title"><div><p class="overline">ISSUER</p><h2>Group Treasury</h2></div><span class="lab-cash" id="lab-issuer-cash">€—</span></div>
+          <p class="lab-help">Publishes funding levels, admits investors, sets the final terms and pays coupons. Its connector locks coupon and principal cash automatically.</p>
+          <table class="lab-table" id="lab-curve"><tbody><tr><td class="empty-state">No funding levels published.</td></tr></tbody></table>
+          <div class="lab-form">
+            <label><span>Tenor</span><select id="curve-tenor"><option value="1">1Y</option><option value="2" selected>2Y</option><option value="3">3Y</option><option value="5">5Y</option></select></label>
+            <label><span>Coupon %</span><input id="curve-coupon" type="number" value="3.10" step="0.05" min="0" max="15" /></label>
+            <label><span>Max units</span><input id="curve-max" type="number" value="500" min="1" max="900" /></label>
+            <button class="button button-small" data-lab="publishFundingLevel">Publish</button>
+          </div>
+          <div class="lab-buttons">
+            <button class="button button-outline button-small" data-lab="approveInvestor">Admit investor</button>
+            <button class="button button-outline button-small" data-lab="inceptTrade">Incept final terms</button>
+            <button class="button button-outline button-small" data-lab="payCoupon">Pay next coupon</button>
+          </div>
+          <label class="lab-toggle"><input type="checkbox" id="lab-autolock" checked /> Connector locks coupon and principal cash automatically</label>
+        </article>
+
+        <article class="panel lab-role">
+          <div class="panel-title"><div><p class="overline">INVESTOR</p><h2>Institutional investor</h2></div><span class="lab-cash" id="lab-investor-cash">€—</span></div>
+          <p class="lab-help">Requests a trade at a published level, checks and confirms the terms, locks the purchase price and asks for redemption. Its connector verifies incoming coupon and principal locks.</p>
+          <div class="lab-form">
+            <label><span>Tenor</span><select id="trade-tenor"><option value="2">2Y</option></select></label>
+            <label><span>Units (€1,000)</span><input id="trade-units-lab" type="number" value="100" min="1" max="900" /></label>
+            <button class="button button-small" data-lab="requestTrade">Request trade</button>
+          </div>
+          <div class="lab-buttons">
+            <button class="button button-outline button-small" data-lab="confirmTrade">Check &amp; confirm terms</button>
+          </div>
+          <div class="lab-form">
+            <label><span>Lock amount € (empty = price)</span><input id="lock-amount" type="number" placeholder="price" min="1" /></label>
+            <button class="button button-small" data-lab="lockIssuanceCash">Lock purchase cash</button>
+          </div>
+          <div class="lab-buttons">
+            <button class="button button-outline button-small" data-lab="abortIssuance">Abort issuance attempt</button>
+            <button class="button button-outline button-small" data-lab="retryIssuance">Retry issuance</button>
+            <button class="button button-outline button-small" data-lab="requestRedemption">Request redemption</button>
+          </div>
+          <div class="lab-holding" id="lab-holding"></div>
+        </article>
+
+        <article class="panel lab-role">
+          <div class="panel-title"><div><p class="overline">INFRASTRUCTURE · AUTOMATIC</p><h2>Participants on the network</h2></div></div>
+          <p class="lab-help">Nobody clicks for them. Each listens to on-chain events and acts with its own key.</p>
+          <div class="lab-participants" id="lab-participants"></div>
+          <div class="lab-buttons lab-clock">
+            <button class="button button-outline button-small" data-lab="advanceToNextCoupon">Clock: next coupon date</button>
+            <button class="button button-outline button-small" data-lab="advanceToMaturity">Clock: maturity</button>
+            <button class="button button-outline button-small" data-lab="reset">Reset lab</button>
+          </div>
+        </article>
+      </section>
+
+      <section class="content-grid lab-detail">
+        <div class="main-column">
+          <div class="lab-section">
+            <p class="overline">SETTLEMENTS · ONE PATTERN FOR ISSUANCE, COUPONS AND PRINCIPAL</p>
+            <table class="lab-table" id="lab-settlements"><tbody><tr><td class="empty-state">No settlement yet.</td></tr></tbody></table>
+          </div>
+          <div class="lab-section">
+            <p class="overline">COUPON SCHEDULE</p>
+            <table class="lab-table" id="lab-coupons"><tbody><tr><td class="empty-state">Appears once the terms are incepted.</td></tr></tbody></table>
+          </div>
+          <div class="lab-section">
+            <p class="overline">TERMS RECORD · SINGLE SOURCE OF TRUTH</p>
+            <code class="lab-hash" id="lab-terms-hash">—</code>
+            <pre class="lab-terms" id="lab-terms">Appears once the issuer incepts the trade.</pre>
+          </div>
+        </div>
+        <aside class="side-column">
+          <section class="panel activity-panel">
+            <div class="panel-title"><div><p class="overline">EVENT MONITOR</p><h2>Who did what, on which ledger</h2></div><span class="live-label"><i></i>Live</span></div>
+            <div id="lab-monitor" class="activity-list lab-monitor"></div>
+          </section>
+        </aside>
+      </section>
+
+      <footer><strong>Prototype · Educational use only</strong><p>Local in-memory ledgers per browser session. The cash ledger only models the behaviour of the Bundesbank Trigger Solution. No real money, securities, ISINs or investor data.</p></footer>
+    </main>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script src="lab-app.js"></script>
+  </body>
+</html>

@@ -17,6 +17,7 @@ const lockingArtifact = require("../artifacts/contracts/AssetLockingContract.sol
 const paymentArtifact = require("../artifacts/contracts/PaymentDecryptionContract.sol/PaymentDecryptionContract.json");
 const { CrossChainScenario } = require("./lib/crosschain-scenario");
 const { CouponScenario } = require("./lib/coupon-scenario");
+const { createLocalLab } = require("./lab/local");
 const couponArtifact = require("../artifacts/contracts/CouponDischarge.sol/CouponDischarge.json");
 
 const PORT = Number(process.env.PORT || 3000);
@@ -100,9 +101,16 @@ function actor(context, name) {
   return selected;
 }
 
-async function closeLedger(context) {
+// Closes every ledger of a session (expiry, eviction, shutdown).
+async function closeSession(context) {
   if (context.cross) await context.cross.close();
   if (context.coupon) await context.coupon.close();
+  if (context.lab) await context.lab.close();
+  await closeLedger(context);
+}
+
+// Closes only the ledger of the main workflow (used when it is reset).
+async function closeLedger(context) {
   if (context.rawProvider && typeof context.rawProvider.disconnect === "function") {
     await context.rawProvider.disconnect();
   }
@@ -163,7 +171,7 @@ async function createSession() {
     const oldest = [...sessions.values()].sort((a, b) => a.lastAccess - b.lastAccess)[0];
     if (oldest) {
       sessions.delete(oldest.id);
-      await closeLedger(oldest);
+      await closeSession(oldest);
     }
   }
   const context = {
@@ -428,7 +436,10 @@ async function transact(context, action, params = {}) {
   }
 }
 
-const contractInterfaces = [bondArtifact, cashArtifact, dvpArtifact, lockingArtifact, paymentArtifact, couponArtifact].map((artifact) => new ethers.Interface(artifact.abi));
+const labArtifacts = ["SmartBondFactory", "SmartBondContract", "BondToken", "CashLock"]
+  .map((name) => require(`../artifacts/contracts/lab/${name}.sol/${name}.json`));
+const contractInterfaces = [bondArtifact, cashArtifact, dvpArtifact, lockingArtifact, paymentArtifact, couponArtifact, ...labArtifacts]
+  .map((artifact) => new ethers.Interface(artifact.abi));
 
 // Ganache nests revert data where ethers does not look, so decode custom errors here.
 function revertReason(error) {
@@ -443,6 +454,43 @@ function revertReason(error) {
     }
   }
   return null;
+}
+
+const LAB_ACTIONS = {
+  publishFundingLevel: (lab, p) => {
+    const tenor = Number(p.tenorYears);
+    const coupon = Number(p.couponPercent);
+    const maxUnits = Number(p.maxUnits);
+    if (![1, 2, 3, 5].includes(tenor)) throw new Error("Choose a tenor of 1, 2, 3 or 5 years.");
+    if (!Number.isFinite(coupon) || coupon < 0 || coupon > 15) throw new Error("Coupon must be between 0% and 15%.");
+    if (!Number.isInteger(maxUnits) || maxUnits < 1 || maxUnits > 900) throw new Error("Maximum size must be 1 to 900 units.");
+    return lab.publishFundingLevel(tenor, coupon, maxUnits);
+  },
+  approveInvestor: (lab) => lab.approveInvestor(),
+  requestTrade: (lab, p) => {
+    const units = Number(p.units);
+    if (!Number.isInteger(units) || units < 1 || units > 900) throw new Error("Units must be 1 to 900 (EUR 1,000 each).");
+    return lab.requestTrade(Number(p.tenorYears), units);
+  },
+  inceptTrade: (lab, p) => lab.inceptTrade(p.couponPercent === "" || p.couponPercent === undefined ? {} : { couponPercent: Number(p.couponPercent) }),
+  confirmTrade: (lab) => lab.confirmTrade(),
+  lockIssuanceCash: (lab, p) => lab.lockIssuanceCash(p.amountEur === "" || p.amountEur === undefined ? undefined : Number(p.amountEur)),
+  abortIssuance: (lab) => lab.abortIssuance(),
+  retryIssuance: (lab) => lab.retryIssuance(),
+  advanceToNextCoupon: (lab) => lab.advanceToNextCoupon(),
+  payCoupon: (lab) => lab.payCoupon(),
+  advanceToMaturity: (lab) => lab.advanceToMaturity(),
+  requestRedemption: (lab) => lab.requestRedemption(),
+  setAutoLock: (lab, p) => {
+    lab.issuerConnector.autoLockCash = Boolean(p.enabled);
+    lab.net.note("Group Treasury", `Automatic cash locking for coupons and principal switched ${p.enabled ? "on" : "off"}.`);
+  },
+};
+
+async function runLabAction(lab, action, params) {
+  const handler = LAB_ACTIONS[action];
+  if (!handler) throw new Error(`Unsupported lab action: ${action}`);
+  await handler(lab, params);
 }
 
 function securityHeaders(extra = {}) {
@@ -477,7 +525,7 @@ function readBody(request) {
 }
 
 function serveFile(requestPath, response) {
-  const routes = { "/": "index.html", "/app.js": "app.js", "/styles.css": "styles.css" };
+  const routes = { "/": "index.html", "/app.js": "app.js", "/styles.css": "styles.css", "/lab": "lab.html", "/lab-app.js": "lab-app.js" };
   const filename = routes[requestPath];
   if (!filename) {
     response.writeHead(404, securityHeaders({ "Content-Type": "text/plain; charset=utf-8" }));
@@ -508,6 +556,30 @@ async function handleRequest(request, response) {
       context.queue = context.queue.catch(() => {}).then(() => transact(context, body.action, body.params));
       await context.queue;
       return sendJson(response, 200, { ok: true, state: await state(context) }, isNew ? context.id : null);
+    }
+    const labRoute = requestUrl.pathname.match(/^\/api\/lab\/(state|action)$/);
+    if (labRoute) {
+      const { context, isNew } = await getSession(request);
+      if (labRoute[1] === "action" && request.method === "POST") {
+        const body = await readBody(request);
+        context.queue = context.queue.catch(() => {}).then(async () => {
+          if (body.action === "reset" && context.lab) {
+            await context.lab.close();
+            context.lab = null;
+          }
+          if (!context.lab) context.lab = await createLocalLab();
+          if (body.action !== "reset") await runLabAction(context.lab, String(body.action), body.params || {});
+        });
+        await context.queue;
+        return sendJson(response, 200, { ok: true, state: await context.lab.state() }, isNew ? context.id : null);
+      }
+      if (labRoute[1] === "state" && request.method === "GET") {
+        context.queue = context.queue.catch(() => {}).then(async () => {
+          if (!context.lab) context.lab = await createLocalLab();
+        });
+        await context.queue;
+        return sendJson(response, 200, await context.lab.state(), isNew ? context.id : null);
+      }
     }
     const scenarioRoute = requestUrl.pathname.match(/^\/api\/(cross|coupon)\/(state|action)$/);
     if (scenarioRoute) {
@@ -555,14 +627,14 @@ setInterval(async () => {
   for (const [id, context] of sessions.entries()) {
     if (context.lastAccess < cutoff) {
       sessions.delete(id);
-      await closeLedger(context);
+      await closeSession(context);
     }
   }
 }, 60_000).unref();
 
 async function shutdown() {
   server.close();
-  await Promise.all([...sessions.values()].map(closeLedger));
+  await Promise.all([...sessions.values()].map(closeSession));
   process.exit(0);
 }
 

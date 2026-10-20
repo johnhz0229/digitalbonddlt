@@ -121,21 +121,22 @@ async function initializeLedger(context, config) {
   await closeLedger(context);
   context.currentConfig = config;
   context.activity = [];
-  context.payments = { alice: { coupon: 0n, principal: 0n }, bob: { coupon: 0n, principal: 0n } };
+  context.payments = { alice: { coupon: 0n, principal: 0n }, bob: { coupon: 0n, principal: 0n }, carol: { coupon: 0n, principal: 0n } };
   context.rawProvider = ganache.provider({
     logging: { quiet: true },
-    wallet: { totalAccounts: 4, defaultBalance: 10_000 },
+    wallet: { totalAccounts: 5, defaultBalance: 10_000 },
     chain: { chainId: 1337, hardfork: "shanghai" },
     miner: { blockGasLimit: 30_000_000 },
   });
   // cacheTimeout -1: never reuse a cached (e.g. failed) gas estimate after state changes.
   context.provider = new ethers.BrowserProvider(context.rawProvider, undefined, { cacheTimeout: -1 });
-  const signers = await Promise.all([0, 1, 2, 3].map((index) => context.provider.getSigner(index)));
+  const signers = await Promise.all([0, 1, 2, 3, 4].map((index) => context.provider.getSigner(index)));
   context.actors = {
-    issuer: { label: "Issuer Treasury", signer: signers[0] },
+    issuer: { label: "Issuer", signer: signers[0] },
     alice: { label: "Investor Alice", signer: signers[1] },
     bob: { label: "Investor Bob", signer: signers[2] },
     cashBank: { label: "Settlement bank", signer: signers[3] },
+    carol: { label: "Investor Carol", signer: signers[4] },
   };
 
   for (const value of Object.values(context.actors)) value.address = await value.signer.getAddress();
@@ -214,7 +215,7 @@ async function state(context) {
   const redemptionFunded = await bond.redemptionFunded();
   const accounts = {};
 
-  for (const name of ["alice", "bob"]) {
+  for (const name of ["alice", "bob", "carol"]) {
     const selected = context.actors[name];
     accounts[name] = {
       label: selected.label,
@@ -278,7 +279,22 @@ async function state(context) {
     redemptionFunded,
     accounts,
     activity: context.activity,
+    events: (await bond.queryFilter("*", 0)).slice(-60).reverse().map((log) => ({
+      block: log.blockNumber,
+      name: log.fragment ? log.fragment.name : "unknown",
+      args: log.fragment ? log.fragment.inputs.map((input, i) => `${input.name}=${nameOf(context, log.args[i])}`).join(", ") : "",
+    })),
   };
+}
+
+// Shows actor names instead of raw addresses in decoded events.
+function nameOf(context, value) {
+  if (typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value)) {
+    if (value === ethers.ZeroAddress) return "0x0";
+    const match = Object.entries(context.actors).find(([, a]) => a.address && a.address.toLowerCase() === value.toLowerCase());
+    return match ? match[0] : `${value.slice(0, 8)}…`;
+  }
+  return typeof value === "bigint" ? value.toString() : String(value);
 }
 
 async function advanceTime(context, targetTimestamp) {
@@ -396,15 +412,36 @@ async function transact(context, action, params = {}) {
       const perUnit = await bond.couponPerUnit();
       const balances = {};
       let total = 0n;
-      for (const name of ["alice", "bob"]) {
+      for (const name of ["alice", "bob", "carol"]) {
         balances[name] = await bond.balanceOf(await context.actors[name].signer.getAddress());
         total += balances[name];
       }
       const payment = perUnit * total;
       tx = await bond.connect(context.actors.issuer.signer).payCoupon({ value: payment });
       await tx.wait();
-      for (const name of ["alice", "bob"]) context.payments[name].coupon += perUnit * balances[name];
+      for (const name of ["alice", "bob", "carol"]) context.payments[name].coupon += perUnit * balances[name];
       addActivity(context, "payment", `Issuer distributed ${ethers.formatEther(payment)} test-currency units as coupon.`, tx.hash);
+      return;
+    }
+    case "issueAsInvestor": {
+      // Deliberate violation: an investor tries to issue units (AC2.1).
+      const investor = actor(context, "alice");
+      tx = await bond.connect(investor.signer).issue(await investor.signer.getAddress(), 5);
+      await tx.wait();
+      return;
+    }
+    case "payCouponWrongAmount": {
+      // Deliberate violation: the coupon is underpaid by one wei (AC4.3).
+      const due = (await bond.couponPerUnit()) * (await bond.totalSupply());
+      tx = await bond.connect(context.actors.issuer.signer).payCoupon({ value: due > 0n ? due - 1n : 1n });
+      await tx.wait();
+      return;
+    }
+    case "fundRedemptionWrongAmount": {
+      // Deliberate violation: principal funding is short by one unit (AC5.2).
+      const due = (await bond.faceValue()) * (await bond.totalSupply());
+      tx = await bond.connect(context.actors.issuer.signer).fundRedemption({ value: due > 0n ? due - 1n : 1n });
+      await tx.wait();
       return;
     }
     case "advanceMaturity": {
@@ -527,7 +564,9 @@ function readBody(request) {
 
 function serveFile(requestPath, response) {
   const routes = {
-    "/": "project.html",
+    "/": "bond.html",
+    "/bond.js": "bond.js",
+    "/settlement": "project.html",
     "/project.js": "project.js",
     "/project.css": "project.css",
     "/modules": "index.html",

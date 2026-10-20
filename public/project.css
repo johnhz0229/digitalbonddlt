@@ -75,3 +75,19 @@ footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--rule);
   h1 { font-size: 26px; }
   .row { flex-direction: column; gap: 8px; }
 }
+
+.req .story td { padding-top: 14px; font-style: italic; color: #333; border-bottom: 1px solid var(--rule); }
+.req td:first-child, .checks td:first-child { white-space: nowrap; font: 13px var(--mono); }
+.ac { margin-left: 6px; color: var(--muted); font: 12px var(--mono); }
+.terms { font-size: 14px; color: #444; }
+.terms code { overflow-wrap: anywhere; color: var(--muted); }
+tr.total td { border-bottom: 0; color: var(--muted); font-size: 14px; }
+.checks td { vertical-align: middle; }
+.checks td:nth-child(3) { width: 1%; }
+.checks td:last-child { font: 12.5px var(--mono); }
+.pass { color: var(--ok); }
+.fail { color: #a11; }
+.muted { color: #999; }
+.blk { display: inline-block; min-width: 38px; color: var(--muted); }
+#events { max-height: 360px; overflow: auto; }
+.req tr.story td { white-space: normal; font: italic 15px var(--serif); }

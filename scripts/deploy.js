@@ -9,7 +9,7 @@ async function main() {
 
   const Bond = await ethers.getContractFactory("TokenizedBond");
   const bond = await Bond.deploy(
-    "Demo DZ Digital Bond 2027",
+    "Demo Digital Bond 2027",
     "DDB27",
     faceValue,
     annualCouponRateBps,

@@ -1,12 +1,20 @@
-# Settling a tokenised bond across two ledgers
+# Tokenized Bond Lifecycle Prototype
 
-A fixed-rate bond whose units live on an asset ledger while its
-cash moves on a separate payment ledger. Issuance, coupons and redemption are
-settled with one protocol: the payer locks cash against two hashes, a stateless
-oracle reveals exactly one preimage depending on the outcome, and the bond
-records an obligation as fulfilled only when it accepts the success preimage.
+EVM-based prototype of a permissioned tokenized bond.
 
 ![Project page](dashboard-preview.png)
+
+- **Lifecycle.** `contracts/TokenizedBond.sol` covers investor whitelisting,
+  issuance, transfers, coupon payments and principal redemption.
+- **Requirements.** Bond lifecycle requirements are written as user stories with
+  acceptance criteria (`docs/USER_STORIES.md`). Each criterion has an ID that maps
+  to a contract function and to automated tests named after it
+  (`test/TokenizedBond.test.js`, 24 positive and negative tests for permissions,
+  payments and lifecycle constraints).
+- **Workflow.** A browser-based workflow runs the lifecycle against a local EVM
+  ledger, including attempts that violate the acceptance criteria and are rejected
+  by the contract. Production gaps such as KYC/AML integration, DvP, custody and
+  treasury-system integration are documented in `docs/PRODUCTION_GAPS.md`.
 
 ## Run
 
@@ -14,60 +22,30 @@ Requirements: Node.js 20 or 22 and npm.
 
 ```bash
 npm install
-npm run demo     # project page with live demonstration: http://127.0.0.1:3000
-npm test         # 54 tests
-npm run lab      # the same life cycle in the terminal
+npm test         # all tests (Hardhat)
+npm run demo     # browser workflow at http://127.0.0.1:3000
 ```
-
-Further views: `/lab` (role-based dashboard), `/modules` (earlier modules).
-
-## Design
-
-- `SmartBondFactory`: the issuer publishes indicative coupons per tenor and admits
-  investors; each trade request deploys one `SmartBondContract`.
-- `SmartBondContract`: explicit state machine
-  (IndicationPhase → TradeIncepted → DistributionPhase → IsinAssigned → Minted →
-  Issued → Redeemed); the investor confirms the hash of a structured terms record;
-  every cash flow uses the same settlement protocol.
-- `BondToken`: deployed and minted by the registrar; only the bond contract moves
-  or burns units.
-- `CashLock`: payment-ledger model of a hash-locked cash account.
-- Off-chain participants (ISIN agent, registrar, decryption oracle, issuer and
-  investor connectors) react to on-chain events with their own keys; there is no
-  central orchestrator.
-
-Properties and their tests are listed on the project page (section 5).
 
 ## Structure
 
 ```text
-contracts/lab/            Factory, bond instance, bond token, cash lock
-scripts/lab/              Participants, human actions, terminal demo, code excerpts for the page
-scripts/lib/erc7573.js    Key documents, encryption, stateless oracle
-test/lab/                 Life cycle, state x role, protections
-public/project.*          Project page
-
-contracts/, test/         Earlier modules: same-ledger DvP (DvPSettlement),
-                          two-ledger DvP with an asset lock (AssetLockingContract,
-                          PaymentDecryptionContract), coupon discharge (CouponDischarge)
+contracts/TokenizedBond.sol   Bond contract
+test/TokenizedBond.test.js    Tests, named by acceptance criterion
+docs/USER_STORIES.md          User stories and acceptance criteria
+docs/PRODUCTION_GAPS.md       Production gaps
+docs/PROCESS_COMPARISON.md    Conventional vs. DLT-based lifecycle
+public/bond.*                 Browser workflow
+scripts/demo-server.js        Local ledger and API for the browser workflow
 ```
 
-## Limitations
+## Extensions
 
-Local in-memory ledgers only; the payment ledger is a model, not a payment
-system. No legal register or real identifiers. A single oracle key (single point
-of trust and liveness dependency). Cash-lock attestation by the payee is a design
-assumption. One investor per instance, no secondary trading, regular annual
-coupon periods only. Not audited.
+Follow-up work on the DvP gap, each with its own tests:
 
-## References
-
-1. BIS CPSS (1992). *Delivery versus payment in securities settlement systems.*
-2. ERC-20: Token Standard. https://eips.ethereum.org/EIPS/eip-20
-3. ERC-6123: Smart Derivative Contract (draft). https://eips.ethereum.org/EIPS/eip-6123
-4. ERC-7573: Conditional-upon-Transfer-Decryption for DvP (draft). https://eips.ethereum.org/EIPS/eip-7573
-5. ICMA. *Bond Data Taxonomy.*
-6. Gesetz über elektronische Wertpapiere (eWpG), 2021.
+- Same-ledger DvP against a tokenised cash token: `contracts/DvPSettlement.sol`.
+- DvP and coupon settlement across two ledgers with hash-locked cash and a
+  stateless decryption oracle: `contracts/lab/`, `scripts/lab/`; pages `/settlement`
+  and `/lab` of the demo server.
 
 ## License
 

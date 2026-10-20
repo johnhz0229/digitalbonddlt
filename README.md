@@ -1,6 +1,6 @@
 # Settling a tokenised bond across two ledgers
 
-Course project. A fixed-rate bond whose units live on an asset ledger while its
+A fixed-rate bond whose units live on an asset ledger while its
 cash moves on a separate payment ledger. Issuance, coupons and redemption are
 settled with one protocol: the payer locks cash against two hashes, a stateless
 oracle reveals exactly one preimage depending on the outcome, and the bond
@@ -58,8 +58,7 @@ Local in-memory ledgers only; the payment ledger is a model, not a payment
 system. No legal register or real identifiers. A single oracle key (single point
 of trust and liveness dependency). Cash-lock attestation by the payee is a design
 assumption. One investor per instance, no secondary trading, regular annual
-coupon periods only. Not audited. Educational use; no real money, securities or
-personal data.
+coupon periods only. Not audited.
 
 ## References
 
@@ -72,4 +71,4 @@ personal data.
 
 ## License
 
-MIT, for educational use. No warranty is provided.
+MIT. No warranty.

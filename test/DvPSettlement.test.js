@@ -1,7 +1,7 @@
 const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-// Each describe block maps to one acceptance criterion in docs/learn/01-dvp.md.
+// Each describe block maps to one acceptance criterion in docs/USER_STORIES.md.
 const Status = { Proposed: 1n, Confirmed: 2n, Settled: 3n, Failed: 4n, Cancelled: 5n };
 const Reason = {
   None: 0n,

@@ -20,7 +20,7 @@ interface ICashToken {
  * @dev Lifecycle: Proposed -> Confirmed -> Settled | Failed, or Proposed -> Cancelled.
  *      A failed settlement is recorded with a reason instead of reverting, so
  *      operations can see every attempt (acceptance criteria AC1-AC5 in
- *      docs/learn/01-dvp.md). Neither leg moves unless both can.
+ *      docs/USER_STORIES.md). Neither leg moves unless both can.
  */
 contract DvPSettlement {
     enum Status { None, Proposed, Confirmed, Settled, Failed, Cancelled }

@@ -26,6 +26,9 @@ npm test         # all tests (Hardhat)
 npm run demo     # browser workflow at http://127.0.0.1:3000
 ```
 
+`npm run build:site` writes a static version of the workflow to `site/`, with the
+ledger running in the browser. `.github/workflows/pages.yml` publishes it to GitHub Pages.
+
 ## Structure
 
 ```text
@@ -35,6 +38,7 @@ docs/USER_STORIES.md          User stories and acceptance criteria
 docs/PRODUCTION_GAPS.md       Production gaps
 docs/PROCESS_COMPARISON.md    Conventional vs. DLT-based lifecycle
 public/bond.*                 Browser workflow
+public/ledger.js              In-browser ledger for the static build
 scripts/demo-server.js        Local ledger and API for the browser workflow
 ```
 

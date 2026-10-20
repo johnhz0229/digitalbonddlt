@@ -1,6 +1,7 @@
 # Tokenized Bond Lifecycle Prototype
 
 EVM-based prototype of a permissioned tokenized bond.
+Live: https://john-huang.com/digitalbonddlt/
 
 ![Project page](dashboard-preview.png)
 

@@ -18,6 +18,7 @@ const paymentArtifact = require("../artifacts/contracts/PaymentDecryptionContrac
 const { CrossChainScenario } = require("./lib/crosschain-scenario");
 const { CouponScenario } = require("./lib/coupon-scenario");
 const { createLocalLab } = require("./lab/local");
+const sourceIndex = require("./lab/source-index");
 const couponArtifact = require("../artifacts/contracts/CouponDischarge.sol/CouponDischarge.json");
 
 const PORT = Number(process.env.PORT || 3000);
@@ -525,7 +526,15 @@ function readBody(request) {
 }
 
 function serveFile(requestPath, response) {
-  const routes = { "/": "index.html", "/app.js": "app.js", "/styles.css": "styles.css", "/lab": "lab.html", "/lab-app.js": "lab-app.js" };
+  const routes = {
+    "/": "walkthrough.html",
+    "/walkthrough.js": "walkthrough.js",
+    "/modules": "index.html",
+    "/app.js": "app.js",
+    "/styles.css": "styles.css",
+    "/lab": "lab.html",
+    "/lab-app.js": "lab-app.js",
+  };
   const filename = routes[requestPath];
   if (!filename) {
     response.writeHead(404, securityHeaders({ "Content-Type": "text/plain; charset=utf-8" }));
@@ -535,7 +544,7 @@ function serveFile(requestPath, response) {
   const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css" };
   response.writeHead(200, securityHeaders({
     "Content-Type": `${types[path.extname(filename)]}; charset=utf-8`,
-    "Cache-Control": filename === "index.html" ? "no-cache" : "public, max-age=300",
+    "Cache-Control": filename.endsWith(".html") ? "no-cache" : "public, max-age=300",
   }));
   fs.createReadStream(path.join(PUBLIC_DIR, filename)).pipe(response);
 }
@@ -556,6 +565,11 @@ async function handleRequest(request, response) {
       context.queue = context.queue.catch(() => {}).then(() => transact(context, body.action, body.params));
       await context.queue;
       return sendJson(response, 200, { ok: true, state: await state(context) }, isNew ? context.id : null);
+    }
+    if (request.method === "GET" && requestUrl.pathname === "/api/source") {
+      const snippet = sourceIndex.extract(String(requestUrl.searchParams.get("id") || ""));
+      if (!snippet) return sendJson(response, 404, { error: "Unknown snippet." });
+      return sendJson(response, 200, snippet);
     }
     const labRoute = requestUrl.pathname.match(/^\/api\/lab\/(state|action)$/);
     if (labRoute) {

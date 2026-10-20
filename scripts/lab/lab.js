@@ -234,6 +234,7 @@ class SmartBondLab {
       },
       instance: null,
       monitor: [...this.net.monitor].reverse().slice(0, 150),
+      monitorCount: this.net.monitor.length,
     };
 
     const count = await factory.instanceCount();

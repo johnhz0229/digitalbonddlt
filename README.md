@@ -4,7 +4,22 @@
 
 This is an educational Solidity prototype made during my spare time showing the lifecycle of a simple fixed-rate digital bond: investor whitelisting, issuance, delivery-versus-payment (DvP) settlement against a tokenised euro, coupon payment, redemption funding and principal repayment.
 
-## Smart Bond Lab (start here)
+## Protocol walkthrough (start here)
+
+![Protocol walkthrough](dashboard-preview.png)
+
+```bash
+npm install
+npm run demo     # opens http://127.0.0.1:3000
+```
+
+The home page walks through one bond in eleven steps, from Treasury's funding
+curve to redemption. Each step runs real transactions on two local ledgers and
+shows who acted, the decoded events of both ledgers, the resulting state and
+balance changes, and the exact source code that ran (read from the repository
+files, with line numbers) together with the tests that cover it.
+
+## Smart Bond Lab
 
 A small learning re-build of the architecture described in the March 2026
 DZ BANK / KfW *Smart Bond Contract* pilot report (public PDF on kfw.de): one
@@ -25,7 +40,7 @@ bond from Treasury's funding levels to redemption, with no central orchestrator.
 
 ```bash
 npm run lab      # terminal: two separate ledgers, full life cycle incl. a refused cash lock
-npm run demo     # then open http://127.0.0.1:3000/lab for the role-based dashboard
+npm run demo     # http://127.0.0.1:3000 walkthrough, /lab role-based dashboard
 ```
 
 This is not the pilot's code and has no legal effect; see
@@ -64,7 +79,6 @@ npm test
 
 ## Interactive dashboard
 
-![Digital bond dashboard](dashboard-preview.png)
 
 Start the browser-based lifecycle demo with one command:
 
@@ -72,7 +86,7 @@ Start the browser-based lifecycle demo with one command:
 npm run demo
 ```
 
-The dashboard opens automatically at `http://127.0.0.1:3000`. No wallet,
+The earlier learning modules are at `http://127.0.0.1:3000/modules`. No wallet,
 browser extension, public blockchain or real currency is required. Each button
 executes a real transaction against the Solidity contract on Hardhat's local
 in-memory ledger. Follow the five numbered steps from KYC whitelisting through
@@ -188,6 +202,8 @@ face value × annual coupon rate × coupon interval / 365 days
 contracts/lab/                    Smart Bond Lab: factory, bond instance, token, cash lock
 scripts/lab/                      Lab participants, human actions, terminal demo
 test/lab/SmartBondLab.test.js     Lab life cycle, state x role, protections
+public/walkthrough.html           Home page: step-by-step walkthrough with live code and events
+scripts/lab/source-index.js       Serves registered code excerpts (with line numbers) to the walkthrough
 public/lab.html                   Role-based Lab dashboard
 docs/learn/06-smart-bond-lab.md   Lab design notes and interview walkthrough (Chinese)
 contracts/TokenizedBond.sol       Permissioned bond contract

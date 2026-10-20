@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Bond Walkthrough</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="wordmark" href="/" aria-label="Walkthrough home">
+        <span class="wordmark-symbol">T</span><span>Treasury<span>/Lab</span></span>
+      </a>
+      <div class="topbar-right">
+        <a class="button button-ghost button-small" href="/lab">Lab dashboard</a>
+        <a class="button button-ghost button-small" href="/modules">Learning modules</a>
+        <span class="prototype-label">EDUCATIONAL PROTOTYPE</span>
+      </div>
+    </header>
+
+    <main class="wt-shell">
+      <section class="wt-hero">
+        <div>
+          <p class="overline">PROTOCOL WALKTHROUGH · REAL TRANSACTIONS · REAL CODE</p>
+          <h1>A DLT-native bond, from funding level to redemption</h1>
+          <p class="subtitle">Each step runs real transactions on two separate local EVM ledgers and shows what every participant did, the decoded events, the resulting state, and the exact source code that ran. A learning re-build of the architecture described in the March 2026 DZ BANK / KfW Smart Bond Contract pilot report, not its code.</p>
+        </div>
+        <div class="wt-hero-stats" id="wt-stats"></div>
+      </section>
+
+      <section class="wt-grid">
+        <nav class="wt-nav" id="wt-nav" aria-label="Steps"></nav>
+
+        <article class="wt-main">
+          <div class="wt-step-head">
+            <p class="overline" id="wt-chapter">—</p>
+            <h2 id="wt-title">Loading…</h2>
+            <div class="wt-actor" id="wt-actor"></div>
+          </div>
+          <div class="wt-text" id="wt-what"></div>
+          <div class="wt-why" id="wt-why"></div>
+          <div class="wt-calls" id="wt-calls"></div>
+          <div class="wt-run">
+            <button class="button" id="wt-run">Run this step</button>
+            <button class="button button-outline" id="wt-next">Next step →</button>
+            <span class="wt-run-status" id="wt-run-status"></span>
+          </div>
+
+          <section class="wt-block" id="wt-ledgers-block">
+            <p class="overline">STATE AFTER THIS STEP</p>
+            <div class="wt-states" id="wt-states"></div>
+            <div class="wt-ledgers">
+              <div class="wt-ledger">
+                <div class="wt-ledger-head"><span class="chain-tag asset">ASSET LEDGER 7101</span><code id="wt-bond-address">—</code></div>
+                <div class="wt-rows" id="wt-asset"></div>
+              </div>
+              <div class="wt-ledger">
+                <div class="wt-ledger-head"><span class="chain-tag payment">PAYMENT LEDGER 7102</span><span>tokenised EUR · CashLock</span></div>
+                <div class="wt-rows" id="wt-payment"></div>
+              </div>
+            </div>
+            <div class="wt-settlements" id="wt-settlements"></div>
+          </section>
+
+          <section class="wt-block">
+            <p class="overline">WHAT HAPPENED · HUMAN ACTIONS, PARTICIPANT REACTIONS, DECODED EVENTS</p>
+            <div class="wt-log" id="wt-log"><div class="empty-state">Run the step to see its transactions.</div></div>
+          </section>
+        </article>
+
+        <aside class="wt-code">
+          <div class="wt-code-head">
+            <p class="overline">SOURCE CODE THAT RUNS IN THIS STEP</p>
+            <div class="wt-tabs" id="wt-tabs" role="tablist"></div>
+          </div>
+          <div class="wt-code-file" id="wt-code-file">—</div>
+          <pre class="wt-pre" id="wt-code"><code>Select a step.</code></pre>
+          <div class="wt-tests" id="wt-tests"></div>
+        </aside>
+      </section>
+
+      <footer><strong>Prototype · Educational use only</strong><p>Local in-memory ledgers per browser session (they expire after 30 minutes idle). The cash ledger only models the behaviour of the Bundesbank Trigger Solution. Not audited, no legal effect, no real money, securities, ISINs or investor data.</p></footer>
+    </main>
+
+    <div id="toast" role="status" aria-live="polite"></div>
+    <script src="walkthrough.js"></script>
+  </body>
+</html>

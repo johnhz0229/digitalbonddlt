@@ -63,7 +63,7 @@ class Network {
   }
 
   note(actor, message, txHash = null) {
-    this.monitor.push({ type: "action", actor, message, txHash, at: new Date().toISOString() });
+    this.monitor.push({ seq: this.monitor.length, type: "action", actor, message, txHash, at: new Date().toISOString() });
   }
 
   async startCursors() {
@@ -91,6 +91,10 @@ class Network {
           address: ethers.getAddress(log.address),
           name: parsed.name,
           args: parsed.args,
+          params: Object.fromEntries(parsed.fragment.inputs.map((input, i) => [
+            input.name,
+            parsed.name === "StateChanged" ? `${parsed.args[i]} (${STATES[Number(parsed.args[i])]})` : displayValue(parsed.args[i]),
+          ])),
           blockNumber: log.blockNumber,
           logIndex: log.index,
           txHash: log.transactionHash,
@@ -106,12 +110,20 @@ class Network {
       const events = await this.fetchNew();
       if (!events.length) return;
       for (const event of events) {
-        this.monitor.push({ type: "event", chain: event.chain, contract: event.contract, address: event.address, name: event.name, summary: summarise(event), txHash: event.txHash, at: new Date().toISOString() });
+        this.monitor.push({ seq: this.monitor.length, type: "event", chain: event.chain, contract: event.contract, address: event.address, name: event.name, summary: summarise(event), params: event.params, blockNumber: event.blockNumber, txHash: event.txHash, at: new Date().toISOString() });
         for (const participant of this.participants) await participant.on(event, this);
       }
     }
     throw new Error("Event loop did not settle.");
   }
+}
+
+// Event arguments as short, JSON-safe strings for the monitor.
+function displayValue(value) {
+  if (typeof value === "bigint") return value.toString();
+  if (typeof value === "string" && /^0x[0-9a-fA-F]+$/.test(value) && value.length > 66) return `${value.slice(0, 18)}…(${(value.length - 2) / 2} bytes)`;
+  if (typeof value === "string" && value.length > 120) return `${value.slice(0, 117)}…`;
+  return value;
 }
 
 function summarise(event) {

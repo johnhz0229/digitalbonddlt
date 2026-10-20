@@ -36,6 +36,7 @@ const date = (seconds) => new Intl.DateTimeFormat("en-GB", { day: "2-digit", mon
 const num = (value) => Number(value).toLocaleString("en-GB", { maximumFractionDigits: 6 });
 
 async function act(action, params = {}) {
+  if (window.BondLedger) return window.BondLedger.action(action, params);
   const response = await fetch("/api/action", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -47,6 +48,7 @@ async function act(action, params = {}) {
 }
 
 async function refresh() {
+  if (window.BondLedger) return window.BondLedger.state();
   const response = await fetch("/api/state");
   return response.json();
 }

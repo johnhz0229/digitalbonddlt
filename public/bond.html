@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tokenized Bond Lifecycle</title>
+    <link rel="stylesheet" href="project.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>Tokenized Bond Lifecycle Prototype</h1>
+        <p class="sub">EVM-based prototype of a permissioned fixed-rate bond</p>
+        <p class="meta">Zheng Huang · <a href="https://github.com/johnhz0229/digitalbonddlt">Source code</a></p>
+      </header>
+
+      <section>
+        <h2>1 Scope</h2>
+        <p>One Solidity contract, <code>TokenizedBond</code>, covers the lifecycle of a permissioned fixed-rate bond: investor whitelisting, issuance, transfers, coupon payments and principal redemption. The issuer controls the whitelist, issuance and payments; investors hold, transfer and redeem units.</p>
+        <table>
+          <thead><tr><th>Stage</th><th>Function</th><th>Rule enforced by the contract</th></tr></thead>
+          <tbody>
+            <tr><td>Whitelisting</td><td><code>setWhitelisted</code></td><td>only the issuer; zero address rejected</td></tr>
+            <tr><td>Issuance</td><td><code>issue</code></td><td>only the issuer, only to whitelisted investors, only before maturity</td></tr>
+            <tr><td>Transfer</td><td><code>transfer</code>, <code>transferFrom</code></td><td>sender and receiver whitelisted; balance and allowance checked</td></tr>
+            <tr><td>Coupon</td><td><code>payCoupon</code></td><td>only on or after the coupon date, exact amount, paid pro rata</td></tr>
+            <tr><td>Redemption</td><td><code>fundRedemption</code>, <code>redeem</code></td><td>funded once at maturity with the exact amount; units burned on payment</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>2 Requirements</h2>
+        <p>Each requirement is a user story with acceptance criteria; each criterion maps to a function and an automated test with the same ID. Full text: <a href="https://github.com/johnhz0229/digitalbonddlt/blob/main/docs/USER_STORIES.md"><code>docs/USER_STORIES.md</code></a>.</p>
+        <table class="req">
+          <thead><tr><th>ID</th><th>Acceptance criterion</th><th>Function</th></tr></thead>
+          <tbody>
+            <tr class="story"><td colspan="3">US1 · As the issuer, I want to maintain a whitelist of investors who passed KYC, so that only eligible parties can hold the bond.</td></tr>
+            <tr><td>AC1.1</td><td>Only the issuer can add or remove an address.</td><td><code>setWhitelisted</code></td></tr>
+            <tr><td>AC1.2</td><td>The zero address cannot be whitelisted.</td><td><code>setWhitelisted</code></td></tr>
+            <tr><td>AC1.3</td><td>Every change emits <code>InvestorWhitelisted</code>.</td><td><code>setWhitelisted</code></td></tr>
+            <tr class="story"><td colspan="3">US2 · As the issuer, I want to issue units to an eligible investor, so that ownership is recorded on the ledger.</td></tr>
+            <tr><td>AC2.1</td><td>Only the issuer can issue.</td><td><code>issue</code></td></tr>
+            <tr><td>AC2.2</td><td>Units can only be issued to whitelisted investors.</td><td><code>issue</code></td></tr>
+            <tr><td>AC2.3</td><td>Issuing zero units is rejected.</td><td><code>issue</code></td></tr>
+            <tr><td>AC2.4</td><td>Balance and total supply increase; <code>BondIssued</code> and <code>Transfer</code> are emitted.</td><td><code>issue</code></td></tr>
+            <tr><td>AC2.5</td><td>No issuance at or after maturity.</td><td><code>issue</code></td></tr>
+            <tr class="story"><td colspan="3">US3 · As an investor, I want to transfer units to another eligible investor, so that transfers stay within the permissioned group.</td></tr>
+            <tr><td>AC3.1</td><td>A transfer between whitelisted investors updates both balances.</td><td><code>transfer</code></td></tr>
+            <tr><td>AC3.2</td><td>A transfer to a non-whitelisted address is rejected.</td><td><code>transfer</code></td></tr>
+            <tr><td>AC3.3</td><td>An investor removed from the whitelist can no longer transfer.</td><td><code>transfer</code></td></tr>
+            <tr><td>AC3.4</td><td>Transfers above the balance or of zero units are rejected.</td><td><code>transfer</code></td></tr>
+            <tr><td>AC3.5</td><td>A third party moves units only within an allowance granted by the holder.</td><td><code>transferFrom</code></td></tr>
+            <tr class="story"><td colspan="3">US4 · As the issuer, I want to pay each scheduled coupon to the current holders, so that investors receive the cash flows defined in the terms.</td></tr>
+            <tr><td>AC4.1</td><td>Coupon per unit = face value × annual rate × interval / 365 days.</td><td><code>couponPerUnit</code></td></tr>
+            <tr><td>AC4.2</td><td>No payment before the coupon date.</td><td><code>payCoupon</code></td></tr>
+            <tr><td>AC4.3</td><td>The payment must equal coupon per unit × total supply.</td><td><code>payCoupon</code></td></tr>
+            <tr><td>AC4.4</td><td>Each holder receives coupon per unit × holding; the schedule moves to the next date.</td><td><code>payCoupon</code></td></tr>
+            <tr><td>AC4.5</td><td>Only the issuer can pay a coupon.</td><td><code>payCoupon</code></td></tr>
+            <tr class="story"><td colspan="3">US5 · As an investor, I want to redeem my units for principal at maturity, so that the bond is repaid and closed.</td></tr>
+            <tr><td>AC5.1</td><td>Principal can be funded only at or after maturity, and only once.</td><td><code>fundRedemption</code></td></tr>
+            <tr><td>AC5.2</td><td>The funding must equal face value × total supply.</td><td><code>fundRedemption</code></td></tr>
+            <tr><td>AC5.3</td><td>Redemption before funding is rejected.</td><td><code>redeem</code></td></tr>
+            <tr><td>AC5.4</td><td>Redemption pays units × face value and burns the units.</td><td><code>redeem</code></td></tr>
+            <tr><td>AC5.5</td><td>A holder without units cannot redeem.</td><td><code>redeem</code></td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>3 Workflow</h2>
+        <p>Runs against the contract on a local EVM ledger in this server.</p>
+        <p class="terms" id="terms">Loading…</p>
+        <table>
+          <thead><tr><th>Investor</th><th>Whitelisted</th><th class="num">Units</th><th class="num">Coupons received</th><th class="num">Principal received</th></tr></thead>
+          <tbody id="register"></tbody>
+        </table>
+
+        <h3>3.1 Lifecycle</h3>
+        <div class="controls"><button id="reset">Reset ledger</button><span id="status"></span></div>
+        <ol class="steps" id="steps"></ol>
+
+        <h3>3.2 Controls</h3>
+        <p>Each action below violates an acceptance criterion and must be rejected by the contract.</p>
+        <table class="checks">
+          <thead><tr><th>ID</th><th>Attempt</th><th></th><th>Result</th></tr></thead>
+          <tbody id="checks"></tbody>
+        </table>
+
+        <h3>3.3 Contract events</h3>
+        <ul class="events" id="events"><li>No events yet.</li></ul>
+      </section>
+
+      <section>
+        <h2>4 Tests</h2>
+        <p><code>npm test</code> runs 24 tests for <code>TokenizedBond</code>: at least one per acceptance criterion, covering the permitted path and the rejected path (permissions, payment amounts, dates and lifecycle order).</p>
+        <pre class="diagram">TokenizedBond
+  US0 Bond terms        AC0.1 rejects invalid terms at deployment
+  US1 Eligibility       AC1.1 – AC1.3     3 tests
+  US2 Issuance          AC2.1 – AC2.5     5 tests
+  US3 Transfers         AC3.1 – AC3.5     5 tests
+  US4 Coupon payments   AC4.1 – AC4.5     5 tests
+  US5 Redemption        AC5.1 – AC5.5     5 tests
+24 passing</pre>
+      </section>
+
+      <section>
+        <h2>5 Production gaps</h2>
+        <table>
+          <thead><tr><th>Area</th><th>Prototype</th><th>Needed in production</th></tr></thead>
+          <tbody>
+            <tr><td>KYC/AML</td><td>Boolean whitelist set by the issuer</td><td>Integration with onboarding and identity systems, sanctions screening, shared identity registry</td></tr>
+            <tr><td>DvP</td><td>Transfers move units without payment; coupons and principal in native test currency</td><td>Regulated settlement asset (tokenised deposits or central bank money) and delivery versus payment</td></tr>
+            <tr><td>Custody</td><td>Local test accounts</td><td>Custody wallets, HSM/MPC key management, recovery, segregation of client assets</td></tr>
+            <tr><td>Treasury systems</td><td>None</td><td>Funding plan, cash and liquidity management, accounting, regulatory reporting, reconciliation</td></tr>
+            <tr><td>Legal register</td><td>None</td><td>Legally recognised register (e.g. eWpG), terms consistent with the contract</td></tr>
+            <tr><td>Servicing</td><td>Coupons pushed to all holders in one loop; simplified day count</td><td>Record-date snapshots, claim-based payments, day-count and business-day conventions</td></tr>
+            <tr><td>Controls</td><td>Single issuer key</td><td>Role separation, multi-signature approval, pause, forced transfer, upgrade governance</td></tr>
+            <tr><td>Privacy, assurance</td><td>Public balances; automated tests</td><td>Confidentiality of positions; security audit and monitoring</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </main>
+    <script src="bond.js"></script>
+  </body>
+</html>

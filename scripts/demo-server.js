@@ -11,6 +11,15 @@ process.env.TMPDIR = runtimeTemp;
 const ganache = require("ganache");
 const { ethers } = require("ethers");
 const bondArtifact = require("../artifacts/contracts/TokenizedBond.sol/TokenizedBond.json");
+const cashArtifact = require("../artifacts/contracts/TokenisedEuro.sol/TokenisedEuro.json");
+const dvpArtifact = require("../artifacts/contracts/DvPSettlement.sol/DvPSettlement.json");
+const lockingArtifact = require("../artifacts/contracts/AssetLockingContract.sol/AssetLockingContract.json");
+const paymentArtifact = require("../artifacts/contracts/PaymentDecryptionContract.sol/PaymentDecryptionContract.json");
+const { CrossChainScenario } = require("./lib/crosschain-scenario");
+const { CouponScenario } = require("./lib/coupon-scenario");
+const { createLocalLab } = require("./lab/local");
+const sourceIndex = require("./lab/source-index");
+const couponArtifact = require("../artifacts/contracts/CouponDischarge.sol/CouponDischarge.json");
 
 const PORT = Number(process.env.PORT || 3000);
 const HOST = process.env.HOST || "0.0.0.0";
@@ -19,6 +28,17 @@ const DAY = 24 * 60 * 60;
 const SESSION_TTL = Number(process.env.SESSION_MINUTES || 30) * 60 * 1000;
 const MAX_SESSIONS = Number(process.env.MAX_SESSIONS || 12);
 const sessions = new Map();
+const INITIAL_CASH_EUR = 5_000;
+const TRADE_STATUS = ["NONE", "PROPOSED", "CONFIRMED", "SETTLED", "FAILED", "CANCELLED"];
+const FAILURE_REASON = [
+  null,
+  "Seller not whitelisted",
+  "Buyer not whitelisted",
+  "Seller has insufficient bonds",
+  "Seller has not authorised the bonds",
+  "Buyer has insufficient cash",
+  "Buyer has not authorised the cash",
+];
 
 const DEFAULT_CONFIG = Object.freeze({
   name: "Demo Digital Bond 2027",
@@ -52,12 +72,45 @@ function addActivity(context, kind, message, txHash = null) {
   context.activity = context.activity.slice(0, 40);
 }
 
+function toCents(eur) {
+  return BigInt(Math.round(Number(eur) * 100));
+}
+
+function formatEur(cents) {
+  return ethers.formatUnits(cents, 2);
+}
+
+function eurText(cents) {
+  return Number(formatEur(cents)).toLocaleString("en-GB", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+async function tradeById(context, id) {
+  const tradeId = Number(id);
+  if (!Number.isInteger(tradeId) || tradeId <= 0) throw new Error("Unknown trade.");
+  const trade = await context.dvp.trades(tradeId);
+  if (trade.status === 0n) throw new Error("Unknown trade.");
+  return { tradeId, trade };
+}
+
+function actorByAddress(context, address) {
+  return Object.entries(context.actors).find(([, value]) => value.address === address);
+}
+
 function actor(context, name) {
   const selected = context.actors[name];
   if (!selected) throw new Error(`Unknown participant: ${name}`);
   return selected;
 }
 
+// Closes every ledger of a session (expiry, eviction, shutdown).
+async function closeSession(context) {
+  if (context.cross) await context.cross.close();
+  if (context.coupon) await context.coupon.close();
+  if (context.lab) await context.lab.close();
+  await closeLedger(context);
+}
+
+// Closes only the ledger of the main workflow (used when it is reset).
 async function closeLedger(context) {
   if (context.rawProvider && typeof context.rawProvider.disconnect === "function") {
     await context.rawProvider.disconnect();
@@ -68,21 +121,25 @@ async function initializeLedger(context, config) {
   await closeLedger(context);
   context.currentConfig = config;
   context.activity = [];
-  context.payments = { alice: { coupon: 0n, principal: 0n }, bob: { coupon: 0n, principal: 0n } };
+  context.payments = { alice: { coupon: 0n, principal: 0n }, bob: { coupon: 0n, principal: 0n }, carol: { coupon: 0n, principal: 0n } };
   context.rawProvider = ganache.provider({
     logging: { quiet: true },
-    wallet: { totalAccounts: 3, defaultBalance: 10_000 },
+    wallet: { totalAccounts: 5, defaultBalance: 10_000 },
     chain: { chainId: 1337, hardfork: "shanghai" },
     miner: { blockGasLimit: 30_000_000 },
   });
-  context.provider = new ethers.BrowserProvider(context.rawProvider);
-  const signers = await Promise.all([0, 1, 2].map((index) => context.provider.getSigner(index)));
+  // cacheTimeout -1: never reuse a cached (e.g. failed) gas estimate after state changes.
+  context.provider = new ethers.BrowserProvider(context.rawProvider, undefined, { cacheTimeout: -1 });
+  const signers = await Promise.all([0, 1, 2, 3, 4].map((index) => context.provider.getSigner(index)));
   context.actors = {
-    issuer: { label: "Issuer Treasury", signer: signers[0] },
+    issuer: { label: "Issuer", signer: signers[0] },
     alice: { label: "Investor Alice", signer: signers[1] },
     bob: { label: "Investor Bob", signer: signers[2] },
+    cashBank: { label: "Settlement bank", signer: signers[3] },
+    carol: { label: "Investor Carol", signer: signers[4] },
   };
 
+  for (const value of Object.values(context.actors)) value.address = await value.signer.getAddress();
   const latest = await context.provider.getBlock("latest");
   const maturityDate = latest.timestamp + (config.maturityYears * 365 + 1) * DAY;
   const factory = new ethers.ContractFactory(bondArtifact.abi, bondArtifact.bytecode, signers[0]);
@@ -95,7 +152,20 @@ async function initializeLedger(context, config) {
     maturityDate
   );
   await context.bond.waitForDeployment();
+
+  const cashFactory = new ethers.ContractFactory(cashArtifact.abi, cashArtifact.bytecode, signers[3]);
+  context.cash = await cashFactory.deploy();
+  await context.cash.waitForDeployment();
+  const dvpFactory = new ethers.ContractFactory(dvpArtifact.abi, dvpArtifact.bytecode, signers[0]);
+  context.dvp = await dvpFactory.deploy(await context.bond.getAddress(), await context.cash.getAddress());
+  await context.dvp.waitForDeployment();
+  for (const name of ["alice", "bob"]) {
+    const tx = await context.cash.mint(await context.actors[name].signer.getAddress(), toCents(INITIAL_CASH_EUR));
+    await tx.wait();
+  }
+
   addActivity(context, "system", `${config.name} (${config.symbol}) was deployed on this private demo ledger.`);
+  addActivity(context, "system", `The settlement bank credited EUR ${INITIAL_CASH_EUR.toLocaleString("en-GB")} in tokenised euro to Alice and Bob.`);
 }
 
 async function createSession() {
@@ -103,7 +173,7 @@ async function createSession() {
     const oldest = [...sessions.values()].sort((a, b) => a.lastAccess - b.lastAccess)[0];
     if (oldest) {
       sessions.delete(oldest.id);
-      await closeLedger(oldest);
+      await closeSession(oldest);
     }
   }
   const context = {
@@ -114,6 +184,8 @@ async function createSession() {
     rawProvider: null,
   };
   await initializeLedger(context, context.currentConfig);
+  context.cross = await CrossChainScenario.create();
+  context.coupon = await CouponScenario.create();
   sessions.set(context.id, context);
   return context;
 }
@@ -143,13 +215,14 @@ async function state(context) {
   const redemptionFunded = await bond.redemptionFunded();
   const accounts = {};
 
-  for (const name of ["alice", "bob"]) {
+  for (const name of ["alice", "bob", "carol"]) {
     const selected = context.actors[name];
     accounts[name] = {
       label: selected.label,
       address: await selected.signer.getAddress(),
       whitelisted: await bond.isWhitelisted(await selected.signer.getAddress()),
       units: Number(await bond.balanceOf(await selected.signer.getAddress())),
+      cash: formatEur(await context.cash.balanceOf(await selected.signer.getAddress())),
       couponReceived: ethers.formatEther(context.payments[name].coupon),
       principalReceived: ethers.formatEther(context.payments[name].principal),
     };
@@ -161,8 +234,33 @@ async function state(context) {
   else if (totalSupply > 0n) phase = "ACTIVE";
   if (redemptionFunded && totalSupply === 0n) phase = "CLOSED";
 
+  const trades = [];
+  const tradeCount = Number(await context.dvp.tradeCount());
+  for (let id = tradeCount; id >= 1 && trades.length < 12; id -= 1) {
+    const trade = await context.dvp.trades(id);
+    const status = TRADE_STATUS[Number(trade.status)];
+    const seller = actorByAddress(context, trade.seller);
+    const buyer = actorByAddress(context, trade.buyer);
+    const check = status === "CONFIRMED" ? FAILURE_REASON[Number(await context.dvp.checkSettlement(id))] : null;
+    trades.push({
+      id,
+      seller: seller ? seller[0] : trade.seller,
+      buyer: buyer ? buyer[0] : trade.buyer,
+      units: Number(trade.units),
+      cash: formatEur(trade.cashAmount),
+      status,
+      failureReason: FAILURE_REASON[Number(trade.failureReason)],
+      bondsAuthorised: (await bond.allowance(trade.seller, await context.dvp.getAddress())) >= trade.units,
+      cashAuthorised: (await context.cash.allowance(trade.buyer, await context.dvp.getAddress())) >= trade.cashAmount,
+      preCheck: check,
+    });
+  }
+
   return {
     contractAddress: await bond.getAddress(),
+    dvpAddress: await context.dvp.getAddress(),
+    cashAddress: await context.cash.getAddress(),
+    trades,
     phase,
     blockTime: block.timestamp,
     terms: {
@@ -181,7 +279,22 @@ async function state(context) {
     redemptionFunded,
     accounts,
     activity: context.activity,
+    events: (await bond.queryFilter("*", 0)).slice(-60).reverse().map((log) => ({
+      block: log.blockNumber,
+      name: log.fragment ? log.fragment.name : "unknown",
+      args: log.fragment ? log.fragment.inputs.map((input, i) => `${input.name}=${nameOf(context, log.args[i])}`).join(", ") : "",
+    })),
   };
+}
+
+// Shows actor names instead of raw addresses in decoded events.
+function nameOf(context, value) {
+  if (typeof value === "string" && /^0x[0-9a-fA-F]{40}$/.test(value)) {
+    if (value === ethers.ZeroAddress) return "0x0";
+    const match = Object.entries(context.actors).find(([, a]) => a.address && a.address.toLowerCase() === value.toLowerCase());
+    return match ? match[0] : `${value.slice(0, 8)}…`;
+  }
+  return typeof value === "bigint" ? value.toString() : String(value);
 }
 
 async function advanceTime(context, targetTimestamp) {
@@ -229,6 +342,65 @@ async function transact(context, action, params = {}) {
       addActivity(context, "transfer", `${from.label} transferred ${units} unit${units === 1 ? "" : "s"} to ${to.label}.`, tx.hash);
       return;
     }
+    case "proposeTrade": {
+      const seller = actor(context, params.seller);
+      const buyer = actor(context, params.buyer);
+      const units = Number(params.units);
+      const price = Number(params.price);
+      if (seller === buyer) throw new Error("Choose two different investors.");
+      if (!Number.isInteger(units) || units <= 0 || units > 1000) throw new Error("Units must be an integer between 1 and 1,000.");
+      if (!Number.isFinite(price) || price <= 0 || price > 1_000_000) throw new Error("Price must be between EUR 0.01 and EUR 1,000,000.");
+      tx = await context.dvp.connect(seller.signer).proposeTrade(buyer.address, units, toCents(price));
+      await tx.wait();
+      const id = Number(await context.dvp.tradeCount());
+      addActivity(context, "trade", `Trade #${id}: ${seller.label} proposed to sell ${units} unit${units === 1 ? "" : "s"} to ${buyer.label} for EUR ${price.toLocaleString("en-GB")}.`, tx.hash);
+      return;
+    }
+    case "confirmTrade": {
+      const { tradeId, trade } = await tradeById(context, params.id);
+      const [, buyer] = actorByAddress(context, trade.buyer);
+      tx = await context.dvp.connect(buyer.signer).confirmTrade(tradeId, trade.units, trade.cashAmount);
+      await tx.wait();
+      addActivity(context, "trade", `Trade #${tradeId}: ${buyer.label} confirmed the same terms.`, tx.hash);
+      return;
+    }
+    case "authoriseBonds": {
+      const { tradeId, trade } = await tradeById(context, params.id);
+      const [, seller] = actorByAddress(context, trade.seller);
+      tx = await bond.connect(seller.signer).approve(await context.dvp.getAddress(), trade.units);
+      await tx.wait();
+      addActivity(context, "trade", `Trade #${tradeId}: ${seller.label} authorised the DvP contract to deliver ${trade.units} unit(s).`, tx.hash);
+      return;
+    }
+    case "authoriseCash": {
+      const { tradeId, trade } = await tradeById(context, params.id);
+      const [, buyer] = actorByAddress(context, trade.buyer);
+      tx = await context.cash.connect(buyer.signer).approve(await context.dvp.getAddress(), trade.cashAmount);
+      await tx.wait();
+      addActivity(context, "trade", `Trade #${tradeId}: ${buyer.label} authorised the DvP contract to pay EUR ${eurText(trade.cashAmount)}.`, tx.hash);
+      return;
+    }
+    case "settleTrade": {
+      const { tradeId, trade } = await tradeById(context, params.id);
+      const [, seller] = actorByAddress(context, trade.seller);
+      tx = await context.dvp.connect(seller.signer).settle(tradeId);
+      await tx.wait();
+      const after = await context.dvp.trades(tradeId);
+      if (after.status === 3n) {
+        addActivity(context, "settlement", `Trade #${tradeId} settled atomically: ${trade.units} unit(s) against EUR ${eurText(trade.cashAmount)}.`, tx.hash);
+      } else {
+        addActivity(context, "failure", `Trade #${tradeId} failed and was recorded: ${FAILURE_REASON[Number(after.failureReason)]}. No bonds or cash moved.`, tx.hash);
+      }
+      return;
+    }
+    case "cancelTrade": {
+      const { tradeId, trade } = await tradeById(context, params.id);
+      const [, seller] = actorByAddress(context, trade.seller);
+      tx = await context.dvp.connect(seller.signer).cancelTrade(tradeId);
+      await tx.wait();
+      addActivity(context, "trade", `Trade #${tradeId} was cancelled before confirmation.`, tx.hash);
+      return;
+    }
     case "advanceCoupon": {
       const current = await state(context);
       if (current.terms.nextCouponDate >= current.terms.maturityDate) throw new Error("No coupon date remains before maturity.");
@@ -240,15 +412,36 @@ async function transact(context, action, params = {}) {
       const perUnit = await bond.couponPerUnit();
       const balances = {};
       let total = 0n;
-      for (const name of ["alice", "bob"]) {
+      for (const name of ["alice", "bob", "carol"]) {
         balances[name] = await bond.balanceOf(await context.actors[name].signer.getAddress());
         total += balances[name];
       }
       const payment = perUnit * total;
       tx = await bond.connect(context.actors.issuer.signer).payCoupon({ value: payment });
       await tx.wait();
-      for (const name of ["alice", "bob"]) context.payments[name].coupon += perUnit * balances[name];
+      for (const name of ["alice", "bob", "carol"]) context.payments[name].coupon += perUnit * balances[name];
       addActivity(context, "payment", `Issuer distributed ${ethers.formatEther(payment)} test-currency units as coupon.`, tx.hash);
+      return;
+    }
+    case "issueAsInvestor": {
+      // Deliberate violation: an investor tries to issue units (AC2.1).
+      const investor = actor(context, "alice");
+      tx = await bond.connect(investor.signer).issue(await investor.signer.getAddress(), 5);
+      await tx.wait();
+      return;
+    }
+    case "payCouponWrongAmount": {
+      // Deliberate violation: the coupon is underpaid by one wei (AC4.3).
+      const due = (await bond.couponPerUnit()) * (await bond.totalSupply());
+      tx = await bond.connect(context.actors.issuer.signer).payCoupon({ value: due > 0n ? due - 1n : 1n });
+      await tx.wait();
+      return;
+    }
+    case "fundRedemptionWrongAmount": {
+      // Deliberate violation: principal funding is short by one unit (AC5.2).
+      const due = (await bond.faceValue()) * (await bond.totalSupply());
+      tx = await bond.connect(context.actors.issuer.signer).fundRedemption({ value: due > 0n ? due - 1n : 1n });
+      await tx.wait();
       return;
     }
     case "advanceMaturity": {
@@ -279,6 +472,63 @@ async function transact(context, action, params = {}) {
     default:
       throw new Error(`Unsupported action: ${action}`);
   }
+}
+
+const labArtifacts = ["SmartBondFactory", "SmartBondContract", "BondToken", "CashLock"]
+  .map((name) => require(`../artifacts/contracts/lab/${name}.sol/${name}.json`));
+const contractInterfaces = [bondArtifact, cashArtifact, dvpArtifact, lockingArtifact, paymentArtifact, couponArtifact, ...labArtifacts]
+  .map((artifact) => new ethers.Interface(artifact.abi));
+
+// Ganache nests revert data where ethers does not look, so decode custom errors here.
+function revertReason(error) {
+  const data = error?.data || error?.info?.error?.data?.result;
+  if (typeof data !== "string" || data.length < 10) return null;
+  for (const contractInterface of contractInterfaces) {
+    try {
+      const parsed = contractInterface.parseError(data);
+      if (parsed) return parsed.name;
+    } catch {
+      // Not an error of this contract; try the next one.
+    }
+  }
+  return null;
+}
+
+const LAB_ACTIONS = {
+  publishFundingLevel: (lab, p) => {
+    const tenor = Number(p.tenorYears);
+    const coupon = Number(p.couponPercent);
+    const maxUnits = Number(p.maxUnits);
+    if (![1, 2, 3, 5].includes(tenor)) throw new Error("Choose a tenor of 1, 2, 3 or 5 years.");
+    if (!Number.isFinite(coupon) || coupon < 0 || coupon > 15) throw new Error("Coupon must be between 0% and 15%.");
+    if (!Number.isInteger(maxUnits) || maxUnits < 1 || maxUnits > 900) throw new Error("Maximum size must be 1 to 900 units.");
+    return lab.publishFundingLevel(tenor, coupon, maxUnits);
+  },
+  approveInvestor: (lab) => lab.approveInvestor(),
+  requestTrade: (lab, p) => {
+    const units = Number(p.units);
+    if (!Number.isInteger(units) || units < 1 || units > 900) throw new Error("Units must be 1 to 900 (EUR 1,000 each).");
+    return lab.requestTrade(Number(p.tenorYears), units);
+  },
+  inceptTrade: (lab, p) => lab.inceptTrade(p.couponPercent === "" || p.couponPercent === undefined ? {} : { couponPercent: Number(p.couponPercent) }),
+  confirmTrade: (lab) => lab.confirmTrade(),
+  lockIssuanceCash: (lab, p) => lab.lockIssuanceCash(p.amountEur === "" || p.amountEur === undefined ? undefined : Number(p.amountEur)),
+  abortIssuance: (lab) => lab.abortIssuance(),
+  retryIssuance: (lab) => lab.retryIssuance(),
+  advanceToNextCoupon: (lab) => lab.advanceToNextCoupon(),
+  payCoupon: (lab) => lab.payCoupon(),
+  advanceToMaturity: (lab) => lab.advanceToMaturity(),
+  requestRedemption: (lab) => lab.requestRedemption(),
+  setAutoLock: (lab, p) => {
+    lab.issuerConnector.autoLockCash = Boolean(p.enabled);
+    lab.net.note("Issuer", `Automatic cash locking for coupons and principal switched ${p.enabled ? "on" : "off"}.`);
+  },
+};
+
+async function runLabAction(lab, action, params) {
+  const handler = LAB_ACTIONS[action];
+  if (!handler) throw new Error(`Unsupported lab action: ${action}`);
+  await handler(lab, params);
 }
 
 function securityHeaders(extra = {}) {
@@ -313,7 +563,18 @@ function readBody(request) {
 }
 
 function serveFile(requestPath, response) {
-  const routes = { "/": "index.html", "/app.js": "app.js", "/styles.css": "styles.css" };
+  const routes = {
+    "/": "bond.html",
+    "/bond.js": "bond.js",
+    "/settlement": "project.html",
+    "/project.js": "project.js",
+    "/project.css": "project.css",
+    "/modules": "index.html",
+    "/app.js": "app.js",
+    "/styles.css": "styles.css",
+    "/lab": "lab.html",
+    "/lab-app.js": "lab-app.js",
+  };
   const filename = routes[requestPath];
   if (!filename) {
     response.writeHead(404, securityHeaders({ "Content-Type": "text/plain; charset=utf-8" }));
@@ -323,7 +584,7 @@ function serveFile(requestPath, response) {
   const types = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css" };
   response.writeHead(200, securityHeaders({
     "Content-Type": `${types[path.extname(filename)]}; charset=utf-8`,
-    "Cache-Control": filename === "index.html" ? "no-cache" : "public, max-age=300",
+    "Cache-Control": filename.endsWith(".html") ? "no-cache" : "public, max-age=300",
   }));
   fs.createReadStream(path.join(PUBLIC_DIR, filename)).pipe(response);
 }
@@ -345,10 +606,60 @@ async function handleRequest(request, response) {
       await context.queue;
       return sendJson(response, 200, { ok: true, state: await state(context) }, isNew ? context.id : null);
     }
+    if (request.method === "GET" && requestUrl.pathname === "/api/source") {
+      const snippet = sourceIndex.extract(String(requestUrl.searchParams.get("id") || ""));
+      if (!snippet) return sendJson(response, 404, { error: "Unknown snippet." });
+      return sendJson(response, 200, snippet);
+    }
+    const labRoute = requestUrl.pathname.match(/^\/api\/lab\/(state|action)$/);
+    if (labRoute) {
+      const { context, isNew } = await getSession(request);
+      if (labRoute[1] === "action" && request.method === "POST") {
+        const body = await readBody(request);
+        context.queue = context.queue.catch(() => {}).then(async () => {
+          if (body.action === "reset" && context.lab) {
+            await context.lab.close();
+            context.lab = null;
+          }
+          if (!context.lab) context.lab = await createLocalLab();
+          if (body.action !== "reset") await runLabAction(context.lab, String(body.action), body.params || {});
+        });
+        await context.queue;
+        return sendJson(response, 200, { ok: true, state: await context.lab.state() }, isNew ? context.id : null);
+      }
+      if (labRoute[1] === "state" && request.method === "GET") {
+        context.queue = context.queue.catch(() => {}).then(async () => {
+          if (!context.lab) context.lab = await createLocalLab();
+        });
+        await context.queue;
+        return sendJson(response, 200, await context.lab.state(), isNew ? context.id : null);
+      }
+    }
+    const scenarioRoute = requestUrl.pathname.match(/^\/api\/(cross|coupon)\/(state|action)$/);
+    if (scenarioRoute) {
+      const [, name, kind] = scenarioRoute;
+      const { context, isNew } = await getSession(request);
+      const scenario = context[name];
+      if (kind === "action" && request.method === "POST") {
+        const body = await readBody(request);
+        const params = body.params || {};
+        const option = ["cancel", "fail"].includes(params.option) ? params.option : "pay";
+        context.queue = context.queue.catch(() => {}).then(() => (
+          body.action === "reset"
+            ? scenario.reset(name === "cross" ? { units: params.units, priceEur: params.priceEur } : {})
+            : scenario.run(String(body.action), option)
+        ));
+        await context.queue;
+        return sendJson(response, 200, { ok: true, state: await scenario.state() }, isNew ? context.id : null);
+      }
+      if (kind === "state" && request.method === "GET") {
+        return sendJson(response, 200, await scenario.state(), isNew ? context.id : null);
+      }
+    }
     if (request.method === "GET") return serveFile(requestUrl.pathname, response);
     sendJson(response, 404, { error: "Not found" });
   } catch (error) {
-    const message = error.shortMessage || error.reason || error.message || "Transaction failed.";
+    const message = revertReason(error) || error.shortMessage || error.reason || error.message || "Transaction failed.";
     sendJson(response, 400, { error: message.replace(/^VM Exception while processing transaction: /, "") });
   }
 }
@@ -370,14 +681,14 @@ setInterval(async () => {
   for (const [id, context] of sessions.entries()) {
     if (context.lastAccess < cutoff) {
       sessions.delete(id);
-      await closeLedger(context);
+      await closeSession(context);
     }
   }
 }, 60_000).unref();
 
 async function shutdown() {
   server.close();
-  await Promise.all([...sessions.values()].map(closeLedger));
+  await Promise.all([...sessions.values()].map(closeSession));
   process.exit(0);
 }
 

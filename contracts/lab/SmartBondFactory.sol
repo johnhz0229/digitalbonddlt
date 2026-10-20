@@ -5,11 +5,10 @@ import "./SmartBondContract.sol";
 
 /**
  * @title SmartBondFactory
- * @notice The issuer's on-chain programme: Group Treasury publishes indicative
+ * @notice The issuer's on-chain programme: the issuer publishes indicative
  *         funding levels per tenor; an eligible investor picks one and requests a
  *         trade; the factory deploys a dedicated Smart Bond Contract for it.
- * @dev Learning re-build after the March 2026 pilot report (Smart Bond Factory:
- *      "registry & access control"). The funding level is expressed directly as
+ * @dev The funding level is expressed directly as
  *      the indicative fixed coupon for that tenor.
  */
 contract SmartBondFactory {

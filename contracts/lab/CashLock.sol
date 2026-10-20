@@ -8,12 +8,12 @@ interface ILockedCash {
 
 /**
  * @title CashLock
- * @notice Payment-ledger stand-in for the Bundesbank Trigger Solution used in the
- *         March 2026 pilot: a payer locks cash irrevocably against two hashes.
+ * @notice Payment-ledger model of a hash-locked cash account: a payer locks cash
+ *         irrevocably against two hashes.
  *         Presenting the success preimage pays the payee; presenting the failure
  *         preimage returns the cash to the payer. Nothing else can move it.
- * @dev The real Trigger Solution settles in central bank money in T2 and is not
- *      a smart contract on an EVM ledger; this only models its behaviour.
+ * @dev A real payment system would settle in central bank or commercial bank money
+ *      and need not run smart contracts; this only models the behaviour.
  */
 contract CashLock {
     enum Status { None, Locked, Released, Returned }

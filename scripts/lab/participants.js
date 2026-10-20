@@ -150,7 +150,7 @@ function summarise(event) {
   }
 }
 
-/** Mock of the ISIN provider (in the pilot: WM Datenservice). */
+/** Mock of the ISIN numbering agency. */
 class IsinAgent {
   constructor(signer) {
     this.label = "ISIN agent";
@@ -167,7 +167,7 @@ class IsinAgent {
   }
 }
 
-/** Crypto securities registrar (in the pilot: Cashlink): deploys and mints the token. */
+/** Crypto securities registrar: deploys and mints the token. */
 class Registrar {
   constructor(signer) {
     this.label = "Registrar";
@@ -190,7 +190,7 @@ class Registrar {
 }
 
 /**
- * Stateless decryption oracle (in the pilot: hosted by NTT DATA). It generates
+ * Stateless decryption oracle. It generates
  * both keys per settlement and forgets the plaintexts; later it decrypts only
  * the key a Smart Bond Contract asks for, after checking that the key names
  * that very contract, settlement, payee, amount and outcome.
@@ -279,7 +279,7 @@ class PartyConnector {
           await (await this.cash.approve(await this.cashLock.getAddress(), s.amount)).wait();
           const tx = await this.cashLock.lock(lockId, s.payee, s.amount, s.hashSuccess, s.hashFailure);
           await tx.wait();
-          net.note(this.label, `Locked ${eurText(s.amount)} on the payment ledger for settlement #${event.args.settlementId} (automated, as in the pilot's A2A setup).`, tx.hash);
+          net.note(this.label, `Locked ${eurText(s.amount)} on the payment ledger for settlement #${event.args.settlementId} (automated).`, tx.hash);
         }
       }
 

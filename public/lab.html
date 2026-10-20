@@ -8,8 +8,8 @@
   </head>
   <body>
     <header class="topbar">
-      <a class="wordmark" href="/" aria-label="Back to Treasury Lab">
-        <span class="wordmark-symbol">T</span><span>Treasury<span>/Lab</span></span>
+      <a class="wordmark" href="/" aria-label="Back to the project page">
+        <span class="wordmark-symbol">T</span><span>Bond<span>/Lab</span></span>
       </a>
       <div class="topbar-right">
         <div class="network"><i></i>Asset ledger 7101 · Payment ledger 7102</div>
@@ -26,7 +26,7 @@
             <span class="symbol-pill" id="lab-isin">NO ISIN YET</span>
             <span class="status-pill" id="lab-state">LOADING</span>
           </div>
-          <p class="subtitle">A small learning re-build of the architecture described in the March 2026 DZ BANK / KfW Smart Bond Contract pilot report: a factory with funding levels, one contract instance per trade with an explicit state machine, infrastructure participants that react to events, and cash locked on a separate payment ledger. Not the pilot's code.</p>
+          <p class="subtitle">A factory with funding levels, one contract instance per trade with an explicit state machine, infrastructure participants that react to events, and cash locked on a separate payment ledger.</p>
           <div class="contract-line"><span>SMART BOND CONTRACT</span><code id="lab-address">No trade requested yet</code></div>
         </div>
         <div class="hero-value"><span>NEXT STEP</span><strong class="lab-next" id="lab-next">—</strong></div>
@@ -36,7 +36,7 @@
 
       <section class="lab-roles">
         <article class="panel lab-role">
-          <div class="panel-title"><div><p class="overline">ISSUER</p><h2>Group Treasury</h2></div><span class="lab-cash" id="lab-issuer-cash">€—</span></div>
+          <div class="panel-title"><div><p class="overline">ISSUER</p><h2>Issuer</h2></div><span class="lab-cash" id="lab-issuer-cash">€—</span></div>
           <p class="lab-help">Publishes funding levels, admits investors, sets the final terms and pays coupons. Its connector locks coupon and principal cash automatically.</p>
           <table class="lab-table" id="lab-curve"><tbody><tr><td class="empty-state">No funding levels published.</td></tr></tbody></table>
           <div class="lab-form">
@@ -112,7 +112,7 @@
         </aside>
       </section>
 
-      <footer><strong>Prototype · Educational use only</strong><p>Local in-memory ledgers per browser session. The cash ledger only models the behaviour of the Bundesbank Trigger Solution. No real money, securities, ISINs or investor data.</p></footer>
+      <footer><strong>Prototype · Educational use only</strong><p>Local in-memory ledgers per browser session. The cash ledger only models a hash-locked cash account. No real money, securities, ISINs or investor data.</p></footer>
     </main>
 
     <div id="toast" role="status" aria-live="polite"></div>

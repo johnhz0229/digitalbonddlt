@@ -73,8 +73,7 @@ class DecryptionOracle {
   }
 
   /**
-   * Generates a success and a failure key for one transfer, as in the March 2026
-   * pilot. Only hashes and ciphertexts leave this function; the plaintexts are
+   * Generates a success and a failure key for one transfer. Only hashes and ciphertexts leave this function; the plaintexts are
    * discarded, so no participant (and not the oracle's storage) holds a preimage.
    */
   generateOutcomeKeys(terms) {

@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tokenised Bond Settlement</title>
+    <link rel="stylesheet" href="project.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="kicker">Course project · October 2026</p>
+        <h1>Settling a tokenised bond across two ledgers</h1>
+        <p class="sub">Delivery versus payment and payment versus discharge without time-locks or a central orchestrator</p>
+        <p class="meta">Zheng Huang · <a href="https://github.com/johnhz0229/digitalbonddlt">Source code</a></p>
+      </header>
+
+      <section>
+        <h2>Abstract</h2>
+        <p>This project implements the life cycle of a fixed-rate bond whose units are held on one ledger (the asset ledger) while its cash moves on another (the payment ledger). Every cash flow, whether issuance price, coupon or principal, is settled with the same protocol: the payer locks cash against two hashes, and a stateless oracle reveals exactly one preimage depending on the outcome. The bond records an obligation as fulfilled only when it accepts the success preimage. The implementation consists of four Solidity contracts, five event-driven off-chain participants and an automated test suite.</p>
+      </section>
+
+      <section>
+        <h2>1 Problem</h2>
+        <p>When the two legs of a trade settle at different times, the party that delivers first bears the full value at risk (principal risk). On a single ledger, both legs can be executed in one atomic transaction. If the asset and the cash are recorded on different ledgers, no transaction spans both.</p>
+        <p>Hash time-locked contracts bridge two ledgers with deadlines. This introduces timing risk and gives the party holding the secret an option to wait. A second problem concerns servicing: a payment status reported by another system should not, on its own, discharge an obligation recorded on the asset ledger.</p>
+        <p class="question"><b>Question.</b> How can issuance, coupons and redemption be settled across two ledgers so that no party bears principal risk, no time-lock is needed, failures are recoverable, and obligations are discharged only by verifiable proof?</p>
+      </section>
+
+      <section>
+        <h2>2 Design</h2>
+        <h3>2.1 Participants</h3>
+        <table>
+          <thead><tr><th>Participant</th><th>Acts</th><th>Responsibility</th></tr></thead>
+          <tbody>
+            <tr><td>Issuer</td><td>manually</td><td>publishes indicative coupons per tenor, sets final terms, opens coupon settlements</td></tr>
+            <tr><td>Investor</td><td>manually</td><td>requests a trade, confirms the terms, locks the purchase price, requests redemption</td></tr>
+            <tr><td>ISIN agent</td><td>on events</td><td>assigns an identifier once the terms are confirmed</td></tr>
+            <tr><td>Registrar</td><td>on events</td><td>deploys the bond token, keeps the eligibility register, mints units</td></tr>
+            <tr><td>Decryption oracle</td><td>on events</td><td>generates key pairs, later decrypts exactly the requested key; keeps no trade state</td></tr>
+            <tr><td>Issuer / investor connector</td><td>on events</td><td>verify incoming cash locks, lock outgoing cash, claim or recover cash</td></tr>
+          </tbody>
+        </table>
+        <p>Each participant signs with its own key and reacts only to on-chain events. Contracts on the two ledgers never call each other.</p>
+
+        <h3>2.2 Life cycle</h3>
+        <p>A factory holds the issuer's indicative coupons per tenor. A trade request deploys one contract instance per trade, which then moves through an explicit state machine; each transition is allowed for one role only.</p>
+        <pre class="diagram">IndicationPhase ─inceptTrade (issuer)──────▶ TradeIncepted
+TradeIncepted   ─confirmTrade (investor)───▶ DistributionPhase   terms immutable
+DistributionPhase ─assignIsin (ISIN agent)─▶ IsinAssigned
+IsinAssigned    ─registerToken (registrar)─▶ Minted
+Minted          ─issuance settled──────────▶ Issued
+Issued          ─coupons, redemption───────▶ Redeemed</pre>
+
+        <h3>2.3 Settlement protocol</h3>
+        <p>Issuance, every coupon and the principal use the same seven steps. <i>k<sub>s</sub></i> and <i>k<sub>f</sub></i> denote the success and failure key; <i>H</i> is keccak256.</p>
+        <pre class="diagram">  asset ledger                         oracle            payment ledger
+  ───────────────────────────────────  ────────────────  ──────────────────────────
+1 request keys ───────────────────────▶ generate k_s, k_f
+                                        publish H(k), Enc(k); discard k
+2                                                         payer locks cash
+                                                          against H(k_s), H(k_f)
+3 payee's connector verifies the lock ◀────────────────── and attests it
+4 execute asset leg, request ONE key ─▶
+5                                       check key document
+                                        (contract, settlement, payee,
+                                         amount, outcome); publish key
+6 accept preimage:
+   k_s → obligation discharged
+   k_f → attempt closed, obligation open
+7                                                         k_s → cash to payee
+                                                          k_f → cash back to payer</pre>
+
+        <h3>2.4 Intended properties</h3>
+        <ol class="props">
+          <li><b>P1 No principal risk.</b> The asset leg executes only after an irrevocable cash lock has been verified by the party that would lose from a fake one.</li>
+          <li><b>P2 One outcome.</b> At most one key is requested and published per settlement attempt.</li>
+          <li><b>P3 Discharge by proof.</b> An obligation is fulfilled only when the bond accepts the success preimage.</li>
+          <li><b>P4 Recoverable failure.</b> A failure key returns the locked cash and closes the attempt, never the obligation; a new attempt uses fresh keys.</li>
+          <li><b>P5 No time-locks.</b> Nothing depends on deadlines; an unpaid attempt can be aborted at any time.</li>
+          <li><b>P6 Bound keys.</b> Nobody knows a preimage before release, and each key names the payee and amount it may be released for.</li>
+        </ol>
+      </section>
+
+      <section>
+        <h2>3 Implementation</h2>
+        <table>
+          <thead><tr><th>Component</th><th>File</th><th class="num">Lines</th></tr></thead>
+          <tbody>
+            <tr><td>Factory: tenors, eligibility, deployment</td><td><code>contracts/lab/SmartBondFactory.sol</code></td><td class="num">101</td></tr>
+            <tr><td>Bond instance: state machine, settlement</td><td><code>contracts/lab/SmartBondContract.sol</code></td><td class="num">351</td></tr>
+            <tr><td>Bond token: registrar-issued, restricted</td><td><code>contracts/lab/BondToken.sol</code></td><td class="num">92</td></tr>
+            <tr><td>Hash-locked cash on the payment ledger</td><td><code>contracts/lab/CashLock.sol</code></td><td class="num">71</td></tr>
+            <tr><td>Participants and event delivery</td><td><code>scripts/lab/participants.js</code></td><td class="num">333</td></tr>
+            <tr><td>Key documents and encryption</td><td><code>scripts/lib/erc7573.js</code></td><td class="num">138</td></tr>
+            <tr><td>Human actions, terms record, state view</td><td><code>scripts/lab/lab.js</code></td><td class="num">299</td></tr>
+            <tr><td>Tests</td><td><code>test/lab/SmartBondLab.test.js</code></td><td class="num">191</td></tr>
+          </tbody>
+        </table>
+        <p>Solidity 0.8.24; two in-memory EVM ledgers (ganache) with chain ids 7101 and 7102; ethers v6; Hardhat for tests. Keys are JSON documents encrypted with RSA-OAEP (3072 bit); the asset ledger stores their keccak256 hashes. The terms are a structured record whose hash the investor confirms after checking it against the values the contract enforces.</p>
+      </section>
+
+      <section>
+        <h2>4 Demonstration</h2>
+        <p>The steps below run real transactions on both ledgers of this server. Run them in order. Each result lists the decoded events and the source code involved.</p>
+        <div class="controls"><button id="reset">Reset ledgers</button><span id="status"></span></div>
+        <ol class="steps" id="steps"></ol>
+      </section>
+
+      <section>
+        <h2>5 Evaluation</h2>
+        <p>Each property is covered by automated tests (<code>npm test</code>).</p>
+        <table>
+          <thead><tr><th>Property</th><th>Test</th></tr></thead>
+          <tbody>
+            <tr><td>P1</td><td>the issuer's connector refuses a wrong cash lock; only the payee can attest a cash lock</td></tr>
+            <tr><td>P2</td><td>only the oracle can publish a key, and only the requested one</td></tr>
+            <tr><td>P3</td><td>a coupon is only discharged when the bond accepts the success key</td></tr>
+            <tr><td>P4</td><td>the investor aborts, recovers the cash and retries</td></tr>
+            <tr><td>P5</td><td>full life cycle without any deadline: issuance, two coupons, redemption with burn</td></tr>
+            <tr><td>P6</td><td>the oracle refuses a request whose terms differ from the key; a buyer paying one cent to his own second address gets no key</td></tr>
+            <tr><td>Life cycle</td><td>each step needs the right role and the right state; coupons and redemption are not due early; terms are confirmed only if record and contract agree</td></tr>
+          </tbody>
+        </table>
+        <p>An earlier version keyed payments by transfer id only, so a buyer could pay one cent to his own second address and still obtain the success key. The fix binds every key to its payee and amount (P6); the attack is now a regression test. The full suite, including earlier single-ledger and two-ledger modules, has 54 passing tests.</p>
+      </section>
+
+      <section>
+        <h2>6 Limitations</h2>
+        <ul>
+          <li>Local ledgers only; the payment ledger models a hash-locked account and is not a payment system.</li>
+          <li>No legal register or real identifier; eligibility is a flag set by the registrar.</li>
+          <li>One oracle key: the oracle is a single point of trust and a liveness dependency. Threshold decryption would address the first.</li>
+          <li>Attestation of the cash lock by the payee is a design assumption.</li>
+          <li>One investor per instance, no secondary trading, regular annual coupon periods only, no business-day convention.</li>
+          <li>Not audited.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>References</h2>
+        <ol class="refs">
+          <li>Bank for International Settlements, CPSS (1992). <i>Delivery versus payment in securities settlement systems.</i></li>
+          <li>ERC-20: Token Standard. <a href="https://eips.ethereum.org/EIPS/eip-20">eips.ethereum.org/EIPS/eip-20</a></li>
+          <li>ERC-6123: Smart Derivative Contract (draft). <a href="https://eips.ethereum.org/EIPS/eip-6123">eips.ethereum.org/EIPS/eip-6123</a></li>
+          <li>ERC-7573: Conditional-upon-Transfer-Decryption for DvP (draft). <a href="https://eips.ethereum.org/EIPS/eip-7573">eips.ethereum.org/EIPS/eip-7573</a></li>
+          <li>ICMA. <i>Bond Data Taxonomy.</i></li>
+          <li>Gesetz über elektronische Wertpapiere (eWpG), 2021.</li>
+        </ol>
+      </section>
+
+      <footer>Run locally: <code>npm install</code>, <code>npm run demo</code>, <code>npm test</code>. Educational prototype; no real money, securities or personal data.</footer>
+    </main>
+    <script src="project.js"></script>
+  </body>
+</html>

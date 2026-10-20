@@ -17,9 +17,9 @@ const errorMessages = {
 };
 
 const PARTICIPANTS = [
-  ["ISIN agent", "Assigns the ISIN when the terms are confirmed (pilot: WM Datenservice)."],
-  ["Registrar", "Deploys and mints the token, keeps the eligibility register (pilot: Cashlink, eWpG)."],
-  ["Decryption oracle", "Generates both keys per settlement, later decrypts exactly the requested one (pilot: NTT DATA)."],
+  ["ISIN agent", "Assigns the ISIN when the terms are confirmed."],
+  ["Registrar", "Deploys and mints the token, keeps the eligibility register."],
+  ["Decryption oracle", "Generates both keys per settlement, later decrypts exactly the requested one."],
   ["Issuer's connector", "Run by the issuer: authorises delivery, verifies incoming cash locks, locks coupon cash."],
   ["Investor's connector", "Run by the investor: verifies coupon and principal locks, claims or recovers cash."],
 ];
@@ -53,10 +53,10 @@ function friendlyError(message) {
 
 function nextStep(state) {
   const i = state.instance;
-  if (!state.curve.some((level) => level.active)) return "Treasury: publish a funding level";
-  if (!state.investorEligible) return "Treasury: admit the investor";
+  if (!state.curve.some((level) => level.active)) return "Issuer: publish a funding level";
+  if (!state.investorEligible) return "Issuer: admit the investor";
   if (!i || i.state === "Cancelled" || i.state === "Redeemed") return i && i.state === "Redeemed" ? "Done: the bond is redeemed. Reset to start again" : "Investor: request a trade";
-  if (i.state === "IndicationPhase") return "Treasury: incept the final terms";
+  if (i.state === "IndicationPhase") return "Issuer: incept the final terms";
   if (i.state === "TradeIncepted") return "Investor: check and confirm the terms";
   if (i.state === "Minted") {
     const issuance = i.settlements.filter((s) => s.purpose === 0).pop();
@@ -66,7 +66,7 @@ function nextStep(state) {
   }
   if (i.state === "Issued") {
     const coupon = i.coupons.find((c) => !c.discharged);
-    if (coupon) return state.blockTime < coupon.date ? `Clock: move to coupon ${coupon.period}` : `Treasury: pay coupon ${coupon.period}`;
+    if (coupon) return state.blockTime < coupon.date ? `Clock: move to coupon ${coupon.period}` : `Issuer: pay coupon ${coupon.period}`;
     return state.blockTime < i.maturityDate ? "Clock: move to maturity" : "Investor: request redemption";
   }
   return "Wait for the participants";

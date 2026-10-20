@@ -484,7 +484,7 @@ const LAB_ACTIONS = {
   requestRedemption: (lab) => lab.requestRedemption(),
   setAutoLock: (lab, p) => {
     lab.issuerConnector.autoLockCash = Boolean(p.enabled);
-    lab.net.note("Group Treasury", `Automatic cash locking for coupons and principal switched ${p.enabled ? "on" : "off"}.`);
+    lab.net.note("Issuer", `Automatic cash locking for coupons and principal switched ${p.enabled ? "on" : "off"}.`);
   },
 };
 
@@ -527,8 +527,9 @@ function readBody(request) {
 
 function serveFile(requestPath, response) {
   const routes = {
-    "/": "walkthrough.html",
-    "/walkthrough.js": "walkthrough.js",
+    "/": "project.html",
+    "/project.js": "project.js",
+    "/project.css": "project.css",
     "/modules": "index.html",
     "/app.js": "app.js",
     "/styles.css": "styles.css",

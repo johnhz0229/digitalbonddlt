@@ -32,14 +32,14 @@ async function step(lab, title, fn) {
 (async () => {
   const lab = await createLocalLab();
   flush(lab);
-  await step(lab, "1. Group Treasury publishes its funding curve", async () => {
+  await step(lab, "1. The issuer publishes its funding curve", async () => {
     await lab.publishFundingLevel(1, 2.85, 500);
     await lab.publishFundingLevel(2, 3.10, 500);
     await lab.publishFundingLevel(3, 3.35, 300);
     await lab.approveInvestor();
   });
   await step(lab, "2. The investor requests 100 units at the 2Y level", () => lab.requestTrade(2, 100));
-  await step(lab, "3. Treasury incepts the final terms", () => lab.inceptTrade());
+  await step(lab, "3. The issuer incepts the final terms", () => lab.inceptTrade());
   await step(lab, "4. The investor confirms; infrastructure participants take over", () => lab.confirmTrade());
   await step(lab, "5. The investor locks only EUR 90,000 (wrong amount)", () => lab.lockIssuanceCash(90_000));
   await step(lab, "6. The investor aborts and gets the cash back, then retries", async () => {

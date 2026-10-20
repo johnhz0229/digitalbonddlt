@@ -1,262 +1,74 @@
-# Permissioned Tokenized Bond Prototype
+# Settling a tokenised bond across two ledgers
 
-[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/johnhz0229/digitalbonddlt)
+Course project. A fixed-rate bond whose units live on an asset ledger while its
+cash moves on a separate payment ledger. Issuance, coupons and redemption are
+settled with one protocol: the payer locks cash against two hashes, a stateless
+oracle reveals exactly one preimage depending on the outcome, and the bond
+records an obligation as fulfilled only when it accepts the success preimage.
 
-This is an educational Solidity prototype made during my spare time showing the lifecycle of a simple fixed-rate digital bond: investor whitelisting, issuance, delivery-versus-payment (DvP) settlement against a tokenised euro, coupon payment, redemption funding and principal repayment.
+![Project page](dashboard-preview.png)
 
-## Protocol walkthrough (start here)
+## Run
 
-![Protocol walkthrough](dashboard-preview.png)
+Requirements: Node.js 20 or 22 and npm.
 
 ```bash
 npm install
-npm run demo     # opens http://127.0.0.1:3000
+npm run demo     # project page with live demonstration: http://127.0.0.1:3000
+npm test         # 54 tests
+npm run lab      # the same life cycle in the terminal
 ```
 
-The home page walks through one bond in eleven steps, from Treasury's funding
-curve to redemption. Each step runs real transactions on two local ledgers and
-shows who acted, the decoded events of both ledgers, the resulting state and
-balance changes, and the exact source code that ran (read from the repository
-files, with line numbers) together with the tests that cover it.
+Further views: `/lab` (role-based dashboard), `/modules` (earlier modules).
 
-## Smart Bond Lab
+## Design
 
-A small learning re-build of the architecture described in the March 2026
-DZ BANK / KfW *Smart Bond Contract* pilot report (public PDF on kfw.de): one
-bond from Treasury's funding levels to redemption, with no central orchestrator.
-
-- `SmartBondFactory`: Group Treasury publishes indicative funding levels per
-  tenor; an eligible investor requests a trade and gets a dedicated contract instance.
-- `SmartBondContract`: explicit state machine (IndicationPhase → TradeIncepted →
-  DistributionPhase → IsinAssigned → Minted → Issued → Redeemed); terms record and
-  hash confirmed by the investor; issuance, every coupon and the principal use the
-  same settlement pattern.
+- `SmartBondFactory`: the issuer publishes indicative coupons per tenor and admits
+  investors; each trade request deploys one `SmartBondContract`.
+- `SmartBondContract`: explicit state machine
+  (IndicationPhase → TradeIncepted → DistributionPhase → IsinAssigned → Minted →
+  Issued → Redeemed); the investor confirms the hash of a structured terms record;
+  every cash flow uses the same settlement protocol.
 - `BondToken`: deployed and minted by the registrar; only the bond contract moves
   or burns units.
-- `CashLock` on a separate payment ledger models the Bundesbank Trigger Solution:
-  cash is locked irrevocably against an oracle-generated success and failure hash.
-- Event-driven participants (ISIN agent, registrar, stateless decryption oracle,
-  issuer's and investor's own connectors) react to on-chain events with their own keys.
+- `CashLock`: payment-ledger model of a hash-locked cash account.
+- Off-chain participants (ISIN agent, registrar, decryption oracle, issuer and
+  investor connectors) react to on-chain events with their own keys; there is no
+  central orchestrator.
 
-```bash
-npm run lab      # terminal: two separate ledgers, full life cycle incl. a refused cash lock
-npm run demo     # http://127.0.0.1:3000 walkthrough, /lab role-based dashboard
-```
+Properties and their tests are listed on the project page (section 5).
 
-This is not the pilot's code and has no legal effect; see
-`docs/learn/06-smart-bond-lab.md` for the design, the differences from the pilot
-and an analysis of asset-lock versus cash-lock DvP. The sections below describe
-the earlier learning modules that led to it.
-
-## Business scenario
-
-A corporate or bank issuer creates a one-year bond with a fixed face value and annual coupon. Only investors who have passed an assumed off-chain KYC process may receive or transfer units. Coupon payments follow a fixed schedule. At maturity, the issuer funds principal and investors redeem their units.
-
-## Implemented scope
-
-- Issuer-controlled investor whitelist
-- Issuance to approved investors
-- Permissioned transfers between approved investors
-- Atomic DvP settlement of bond units against a demo tokenised euro (`DvPSettlement`)
-- Recorded settlement failures with a reason (missing cash, bonds, authorisation or KYC status), so operations sees every attempt
-- Coupon servicing as payment versus discharge: a coupon claim fixed at the record date is discharged only when the bond accepts the success preimage released after the cash moved; a failure closes the attempt but keeps the claim
-- Cross-chain DvP without time-locks, simplified from ERC-7573 (Fries, Kohl-Landgraf; draft): the bond is locked on an asset chain against two key hashes, the payment chain decides which encrypted key a stateless decryption oracle releases
-- Fixed coupon calculation using basis points
-- Scheduled coupon distribution
-- Maturity check and redemption funding
-- Investor-initiated principal redemption and token burn
-- Events for an auditable lifecycle trail
-- Automated positive and negative tests
-
-## Quick start
-
-Requirements: Node.js 20 or newer and npm.
-
-```bash
-npm install
-npm test
-```
-
-## Interactive dashboard
-
-
-Start the browser-based lifecycle demo with one command:
-
-```bash
-npm run demo
-```
-
-The earlier learning modules are at `http://127.0.0.1:3000/modules`. No wallet,
-browser extension, public blockchain or real currency is required. Each button
-executes a real transaction against the Solidity contract on Hardhat's local
-in-memory ledger. Follow the five numbered steps from KYC whitelisting through
-issuance, DvP trade, coupon payment and maturity redemption. The settlement
-blotter shows every trade, its pre-check result, and the reason for any failure. Press `Ctrl+C` in
-the terminal when finished.
-
-The four dashboard views support an interview walkthrough:
-
-- **Overview** frames the business problem and compares conventional and DLT processes.
-- **Live workflow** executes the permissioned bond lifecycle on the local ledger.
-- **Requirements** maps business rules to user outcomes, contract functions and tests.
-- **Testing & risks** documents acceptance evidence and production-readiness gaps.
-
-In **Live workflow**, the Instrument Builder can deploy a fresh contract with a
-custom bond name, symbol, face value, annual coupon, payment frequency and
-maturity. All later issuance, coupon and redemption results use the selected
-terms.
-
-## Cross-chain DvP (ERC-7573 style)
-
-When the bond and the cash live on different ledgers, there is no shared
-transaction to make settlement atomic. This prototype follows the idea of
-ERC-7573:
-
-1. Each party generates the *other* party's key, so nobody holds the key that
-   would benefit themselves.
-2. The asset chain locks the bond against the hashes of both keys.
-3. The payment chain stores both keys encrypted for an oracle. A successful
-   payment requests the buyer's key; a failed or cancelled payment requests the
-   seller's key. Only one key is ever requested.
-4. A stateless oracle decrypts that one key and publishes it. Whoever submits
-   it on the asset chain moves the bond in the direction the key encodes.
-
-Each key document also names the payment it may be released for: the payment
-contract, the payee and the amount. The oracle checks them before decrypting,
-so a buyer cannot obtain the success key by "paying" one cent to his own
-second address under the same transfer id. An earlier version of this
-prototype had exactly that hole; the tests now cover it.
-
-Run it on two separate local ledgers in the terminal (success, failed payment
-and cancellation):
-
-```bash
-npm run crosschain
-```
-
-or step through it in the dashboard's **Cross-chain DvP** tab, which shows both
-ledgers and who knows which key at each step.
-
-## Coupon: payment versus discharge
-
-A reported "paid" status should not be enough to wipe out an investor's claim.
-`CouponDischarge` fixes each holder's claim at the record date, then for each
-settlement attempt freezes the hashes of a success key and a failure key that
-the oracle generated (and immediately forgot, as in the March 2026 DZ BANK /
-KfW Smart Bond Contract pilot). The cash moves on the payment ledger; the
-oracle reveals one key; the bond:
-
-- discharges the claim only when it accepts the success preimage;
-- closes the attempt but keeps the claim open on a failure preimage;
-- treats a repeated forward of the same key as a no-op, so connectors can retry.
-
-```bash
-npm run coupon
-```
-
-or use the dashboard's **Coupon discharge** tab. This is an educational reading
-of the abstract of Fries, Kohl-Landgraf and Prandtl (2026), "Participant-Operated
-Settlement Connectors for Digital Bonds", not an implementation of the paper.
-
-## Public deployment
-
-The demo is prepared for a Node.js 20 web service. Each browser receives an
-isolated in-memory ledger identified by an HTTP-only session cookie; inactive
-ledgers expire after 30 minutes, and no wallet, private key or real asset is
-accepted from the visitor.
-
-For Render, push the repository to GitHub and create a new Blueprint from the
-included `render.yaml`. Render installs only runtime dependencies, uses the
-verified contract artifact, checks `/health` and provides an HTTPS URL. A standard `Dockerfile` is also
-included for Railway, Fly.io or another container host.
-
-Cloud demo state is intentionally temporary. A service restart or idle-session
-expiry creates a fresh ledger, which is appropriate for this educational use
-case.
-
-Optional local deployment:
-
-```bash
-npx hardhat node
-npm run deploy:local
-```
-
-## Example terms
-
-The deployment script creates a demo bond with:
-
-- face value: 1 unit of test currency per bond unit;
-- annual coupon: 5.00%;
-- coupon interval: 90 days;
-- maturity: approximately one year after issuance.
-
-The periodic coupon is calculated as:
+## Structure
 
 ```text
-face value × annual coupon rate × coupon interval / 365 days
+contracts/lab/            Factory, bond instance, bond token, cash lock
+scripts/lab/              Participants, human actions, terminal demo, code excerpts for the page
+scripts/lib/erc7573.js    Key documents, encryption, stateless oracle
+test/lab/                 Life cycle, state x role, protections
+public/project.*          Project page
+
+contracts/, test/         Earlier modules: same-ledger DvP (DvPSettlement),
+                          two-ledger DvP with an asset lock (AssetLockingContract,
+                          PaymentDecryptionContract), coupon discharge (CouponDischarge)
 ```
 
-## Repository structure
+## Limitations
 
-```text
-contracts/lab/                    Smart Bond Lab: factory, bond instance, token, cash lock
-scripts/lab/                      Lab participants, human actions, terminal demo
-test/lab/SmartBondLab.test.js     Lab life cycle, state x role, protections
-public/walkthrough.html           Home page: step-by-step walkthrough with live code and events
-scripts/lab/source-index.js       Serves registered code excerpts (with line numbers) to the walkthrough
-public/lab.html                   Role-based Lab dashboard
-docs/learn/06-smart-bond-lab.md   Lab design notes and interview walkthrough (Chinese)
-contracts/TokenizedBond.sol       Permissioned bond contract
-contracts/TokenisedEuro.sol       Demo cash token (stand-in for a tokenised deposit or wholesale CBDC)
-contracts/DvPSettlement.sol       Delivery-versus-payment between bond and cash token
-test/TokenizedBond.test.js        Bond lifecycle tests
-test/DvPSettlement.test.js        DvP tests, one block per acceptance criterion
-contracts/AssetLockingContract.sol       Asset-chain side of cross-chain DvP (ERC-7573 style)
-contracts/PaymentDecryptionContract.sol  Payment-chain side: pays and requests one key
-scripts/lib/erc7573.js            Key documents, encryption and the stateless decryption oracle
-scripts/lib/crosschain-scenario.js Two-ledger protocol used by the terminal demo and dashboard
-scripts/crosschain-demo.js        Terminal walkthrough of three cross-chain scenarios
-test/CrossChainDvP.test.js        Cross-chain success, failure, cancellation and attack tests
-contracts/CouponDischarge.sol     Coupon claims discharged only by an accepted success preimage
-scripts/lib/coupon-scenario.js    Two-ledger coupon protocol used by the terminal demo and dashboard
-scripts/coupon-demo.js            Terminal walkthrough: paid coupon, and failure followed by a retry
-test/CouponDischarge.test.js      Record date, discharge, retry, idempotent forwarding, forgery tests
-docs/learn/01-dvp.md              Study notes: DvP from business problem to code (Chinese)
-docs/learn/03-crosschain-dvp.md   Study notes: cross-chain DvP and ERC-7573 (Chinese)
-docs/learn/04-coupon-discharge.md Study notes: payment versus discharge and the 2026 pilot (Chinese)
-docs/learn/05-interview-defense.md Interview preparation: honest boundaries, likely questions, demo script
-scripts/deploy.js                 Local deployment example
-scripts/demo-server.js            Local ledger and dashboard API
-public/                            Interactive browser dashboard
-docs/USER_STORIES.md              Requirements and acceptance criteria
-docs/PROCESS_COMPARISON.md        Traditional vs. DLT lifecycle comparison
-```
+Local in-memory ledgers only; the payment ledger is a model, not a payment
+system. No legal register or real identifiers. A single oracle key (single point
+of trust and liveness dependency). Cash-lock attestation by the payee is a design
+assumption. One investor per instance, no secondary trading, regular annual
+coupon periods only. Not audited. Educational use; no real money, securities or
+personal data.
 
-## Deliberate simplifications and risks
+## References
 
-This prototype keeps a holder array and pushes coupons to all holders. That is readable for a small demonstration but does not scale and can fail if a recipient contract rejects payment. A real implementation would normally use record-date snapshots and claim-based payments.
-
-Other omitted production requirements include:
-
-- formal role-based access control and multisignature governance;
-- legally binding investor identity and KYC/AML integration;
-- a legally backed cash leg (the demo tokenised euro has none) or a trigger to central bank money in T2;
-- a production oracle (threshold decryption, key management) and real ledger connectivity for cross-chain DvP;
-- pause, recovery, forced transfer and key-loss processes;
-- day-count conventions, business-day calendars and precise coupon schedules;
-- privacy, data protection and regulatory reporting;
-- upgrade governance, external security audit and operational monitoring;
-- connection to trading, custody, CSD and treasury systems.
-
-These limitations are intentional discussion points: the prototype demonstrates how business requirements can become user stories, Solidity rules and automated tests without presenting a classroom example as bank-ready infrastructure.
-
-## Suggested interview walkthrough
-
-1. Start with the business process and why the whitelist is off-chain/on-chain hybrid.
-2. Map each user story to a contract function and its automated test.
-3. Demonstrate that invalid permissions, early payments and incorrect amounts revert.
-4. Explain why production coupon distribution needs snapshots and a pull-payment model.
-5. Discuss legal ownership, settlement finality, privacy and integration as equally important parts of a bank solution.
+1. BIS CPSS (1992). *Delivery versus payment in securities settlement systems.*
+2. ERC-20: Token Standard. https://eips.ethereum.org/EIPS/eip-20
+3. ERC-6123: Smart Derivative Contract (draft). https://eips.ethereum.org/EIPS/eip-6123
+4. ERC-7573: Conditional-upon-Transfer-Decryption for DvP (draft). https://eips.ethereum.org/EIPS/eip-7573
+5. ICMA. *Bond Data Taxonomy.*
+6. Gesetz über elektronische Wertpapiere (eWpG), 2021.
 
 ## License
 

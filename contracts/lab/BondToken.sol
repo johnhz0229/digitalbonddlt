@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 /**
  * @title BondToken
  * @notice Asset token of one Smart Bond transaction, deployed by the crypto
- *         securities registrar (in the March 2026 pilot: Cashlink, under eWpG).
+ *         securities registrar.
  * @dev Units have no decimals; one unit is one denomination of the bond.
  *      Only the registrar mints and keeps the eligibility register. Only the
  *      Smart Bond Contract (the servicer) moves or burns units, using the

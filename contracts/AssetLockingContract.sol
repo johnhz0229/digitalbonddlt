@@ -9,7 +9,7 @@ interface ILockableSecurity {
 /**
  * @title AssetLockingContract
  * @notice Asset-chain side of a cross-chain DvP, simplified from ERC-7573
- *         (Fries, Kohl-Landgraf; draft).
+ *         (draft standard).
  * @dev The bond is locked here against two key hashes:
  *      - buyer key: releases the bond to the buyer (published when payment succeeds)
  *      - seller key: returns the bond to the seller (published when payment fails)

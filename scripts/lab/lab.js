@@ -1,5 +1,5 @@
 // Smart Bond Lab: two ledgers, event-driven participants, and the actions the
-// two humans take (Group Treasury as issuer, an institutional investor).
+// two humans take (the issuer and an institutional investor).
 const { ethers } = require("ethers");
 const {
   ABI, STATES, SETTLEMENT_STATUS, artifact, legacyArtifact, lockIdFor,
@@ -30,7 +30,7 @@ function buildTerms({ programme, bondAddress, issuer, investor, units, tenorYear
     instrument: { type: "fixed rate bond", form: "crypto security (eWpG), simulated", currency: "EUR", denomination: Number(FACE_VALUE_CENTS) / 100, units, nominal: units * Number(FACE_VALUE_CENTS) / 100 },
     interest: { rateBps: couponBps, frequency: "annual", dayCount: "ACT/ACT (ICMA), regular annual periods" },
     dates: { issueDate: iso(issueDate), maturityDate: iso(BigInt(issueDate) + BigInt(tenorYears * YEAR)), tenorYears },
-    settlement: { type: "DvP", cashLeg: "cash locked on the payment ledger (Trigger Solution model)", keys: "ERC-7573 style, oracle-generated" },
+    settlement: { type: "DvP", cashLeg: "cash locked on the payment ledger", keys: "ERC-7573 style, oracle-generated" },
   });
 }
 
@@ -55,7 +55,7 @@ class SmartBondLab {
    * `chains` = { asset: { provider, signers }, payment: { provider, signers } } with signers
    * [issuer, investor, registrar, isinAgent, oracle, cashBank]; the same index is the same party.
    */
-  static async create(chains, { programme = "Demo Group Treasury EUR Programme" } = {}) {
+  static async create(chains, { programme = "Demo EUR Bond Programme" } = {}) {
     const lab = new SmartBondLab();
     lab.chains = chains;
     lab.programme = programme;
@@ -103,16 +103,16 @@ class SmartBondLab {
     await this.net.pump();
   }
 
-  // ---- Group Treasury (issuer) ----
+  // ---- Issuer ----
 
   async publishFundingLevel(tenorYears, couponPercent, maxUnits) {
     const bps = Math.round(Number(couponPercent) * 100);
-    return this.act("Group Treasury", `Published the ${tenorYears}Y funding level: ${Number(couponPercent).toFixed(2)}% for up to ${maxUnits} units.`,
+    return this.act("Issuer", `Published the ${tenorYears}Y funding level: ${Number(couponPercent).toFixed(2)}% for up to ${maxUnits} units.`,
       () => this.factory.connect(this.parties.issuer).publishFundingLevel(tenorYears, bps, maxUnits));
   }
 
   async approveInvestor() {
-    return this.act("Group Treasury", "Admitted the investor to the programme (eligibility after onboarding).",
+    return this.act("Issuer", "Admitted the investor to the programme (eligibility after onboarding).",
       async () => this.factory.connect(this.parties.issuer).setEligibleInvestor(await this.parties.investor.getAddress(), true));
   }
 
@@ -126,7 +126,7 @@ class SmartBondLab {
       issuer: await this.parties.issuer.getAddress(), investor: await this.parties.investor.getAddress(),
       units: Number(await bond.units()), tenorYears: Number(await bond.tenorYears()), couponBps, issueDate,
     });
-    return this.act("Group Treasury", `Incepted the trade with final terms at ${(couponBps / 100).toFixed(2)}%.`,
+    return this.act("Issuer", `Incepted the trade with final terms at ${(couponBps / 100).toFixed(2)}%.`,
       () => bond.inceptTrade(terms, couponBps, issueDate));
   }
 
@@ -135,7 +135,7 @@ class SmartBondLab {
     const bond = this.bond(address, this.parties.issuer);
     let period = 1;
     while (await bond.discharged(period)) period += 1;
-    return this.act("Group Treasury", `Opened the settlement of coupon ${period}.`, () => bond.openCouponSettlement(period));
+    return this.act("Issuer", `Opened the settlement of coupon ${period}.`, () => bond.openCouponSettlement(period));
   }
 
   // ---- Investor ----

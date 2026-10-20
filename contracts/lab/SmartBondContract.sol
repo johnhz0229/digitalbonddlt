@@ -12,8 +12,6 @@ interface IBondToken {
 /**
  * @title SmartBondContract
  * @notice One instance per bond transaction, deployed by SmartBondFactory.
- *         A learning re-build of the architecture described in the March 2026
- *         DZ BANK / KfW "Smart Bond Contract" pilot report; not its code.
  * @dev Life cycle (each state gates the next, each step has one role):
  *        IndicationPhase  --inceptTrade (issuer)-->        TradeIncepted
  *        TradeIncepted    --confirmTrade (investor)-->     DistributionPhase   terms now immutable
@@ -24,8 +22,7 @@ interface IBondToken {
  *        IndicationPhase / TradeIncepted --cancel-->       Cancelled
  *
  *      Every cash movement (issuance price, each coupon, principal) is one
- *      settlement with the same pattern, after the Bundesbank Trigger Solution
- *      model in the pilot: the oracle generates a success and a failure key; the
+ *      settlement with the same pattern: the oracle generates a success and a failure key; the
  *      payer locks cash on the payment ledger against both hashes; the payee's
  *      own connector verifies the lock and attests it here; settlement then
  *      requests exactly one key. The success key releases the cash to the payee
@@ -74,7 +71,7 @@ contract SmartBondContract {
     address public token;
 
     mapping(uint256 => Settlement) public settlements;
-    // As in the pilot, the contract stores both encrypted keys and asks for exactly one.
+    // The contract stores both encrypted keys and asks for exactly one.
     mapping(uint256 => bytes) public keyEncryptedSuccessOf;
     mapping(uint256 => bytes) public keyEncryptedFailureOf;
     mapping(uint256 => uint256) public attemptCount; // per purpose
